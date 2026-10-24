@@ -6,6 +6,7 @@ import { config } from './config/env.js';
 import roadmapRoutes from './routes/roadmapRoutes.js';
 import { getHealthStatus } from './controllers/healthController.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
+import { authenticateRequest } from './middleware/authMiddleware.js';
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(morgan(config.nodeEnv === 'development' ? 'dev' : 'combined'));
+app.use(authenticateRequest);
 
 // Base health check
 app.get('/api/health', getHealthStatus);

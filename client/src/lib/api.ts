@@ -3,9 +3,24 @@ import type { Roadmap, Task, SkillGap, QuizQuestion, GenerateRoadmapPayload, Hea
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  let authHeaders: Record<string, string> = {};
+  try {
+    const rawSession = localStorage.getItem('skillpilot_auth_session');
+    if (rawSession) {
+      const parsed = JSON.parse(rawSession);
+      if (parsed.id) {
+        authHeaders['x-user-id'] = parsed.id;
+        authHeaders['Authorization'] = `Bearer simulated-jwt-${parsed.id}`;
+      }
+    }
+  } catch {
+    // Ignore error
+  }
+
   const response = await fetch(url, {
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
       ...options?.headers,
     },
     ...options,

@@ -1,6 +1,7 @@
-import React from 'react';
-import { Compass, Sparkles, Flame, Zap, CheckCircle2, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Compass, Sparkles, Flame, Zap, CheckCircle2, AlertCircle, LogOut, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { useAuth } from '../../context/AuthContext';
 import type { Roadmap } from '../../types';
 
 export interface NavbarProps {
@@ -14,6 +15,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenGenerator,
   isBackendHealthy,
 }) => {
+  const { user, logout, isConfiguredWithSupabase } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  const getInitials = (name?: string) => {
+    if (!name) return 'S';
+    return name
+      .split(' ')
+      .map((part) => part[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
+  };
+
   return (
     <header className="sticky top-0 z-40 w-full glass-nav px-4 sm:px-8 py-3.5 border-b border-slate-800/80">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
@@ -37,9 +51,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Stats & Actions */}
+        {/* Stats & User Actions */}
         <div className="flex items-center gap-2 sm:gap-4">
-          {/* Service Status */}
+          {/* Backend / Cloud Status */}
           <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/80 border border-slate-800 text-xs">
             {isBackendHealthy ? (
               <>
@@ -78,6 +92,67 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="hidden sm:inline">New Roadmap</span>
             <span className="sm:hidden">Create</span>
           </Button>
+
+          {/* User Profile & Logout Dropdown */}
+          {user && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-2 p-1 pl-2 pr-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 transition-all text-xs text-slate-200"
+                aria-label="User profile menu"
+              >
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.fullName}
+                    className="w-6 h-6 rounded-lg object-cover border border-indigo-500/40"
+                  />
+                ) : (
+                  <div className="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-[10px] text-white">
+                    {getInitials(user.fullName)}
+                  </div>
+                )}
+                <span className="hidden md:inline font-semibold max-w-[100px] truncate">
+                  {user.fullName}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {showUserMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setShowUserMenu(false)}
+                    aria-hidden="true"
+                  />
+                  <div className="absolute right-0 mt-2 w-56 rounded-2xl glass-card bg-slate-900/95 border border-slate-800 shadow-2xl p-2 z-40 animate-slide-up">
+                    <div className="px-3 py-2 border-b border-slate-800 mb-1">
+                      <p className="text-xs font-bold text-white truncate">{user.fullName}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
+                      <div className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-500">
+                        <span className={`w-1.5 h-1.5 rounded-full ${isConfiguredWithSupabase ? 'bg-emerald-400' : 'bg-indigo-400'}`} />
+                        <span>{isConfiguredWithSupabase ? 'Supabase Live' : 'Local Auth'}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        logout();
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </header>

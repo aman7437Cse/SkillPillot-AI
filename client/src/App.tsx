@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
+  Compass,
   Sparkles,
   Flame,
   Zap,
@@ -17,6 +18,9 @@ import {
   Server
 } from 'lucide-react';
 
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthPage } from './components/auth/AuthPage';
+import { OnboardingWizard } from './components/auth/OnboardingWizard';
 import { api } from './lib/api';
 import { Navbar } from './components/layout/Navbar';
 import { Button } from './components/ui/Button';
@@ -35,7 +39,9 @@ import { fireCelebrationConfetti } from './lib/confetti';
 
 import type { Roadmap, Task, SkillGap, GenerateRoadmapPayload, HealthStatus } from './types';
 
-export function App() {
+function DashboardContent() {
+  const { user, isLoading: authLoading } = useAuth();
+
   // Navigation & View state
   const [activeTab, setActiveTab] = useState<'daily' | 'roadmap' | 'gaps' | 'system'>('daily');
   
@@ -85,8 +91,33 @@ export function App() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (user && user.isOnboarded) {
+      fetchData();
+    }
+  }, [user?.id, user?.isOnboarded]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#090d16] flex flex-col items-center justify-center p-4">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-cyan-400 p-[1px] shadow-glow-md animate-pulse">
+          <div className="w-full h-full bg-slate-950 rounded-[15px] flex items-center justify-center text-indigo-400">
+            <Compass className="w-7 h-7 animate-spin" />
+          </div>
+        </div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-4 animate-pulse">
+          Authenticating SkillPilot Session...
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage />;
+  }
+
+  if (!user.isOnboarded) {
+    return <OnboardingWizard onComplete={() => fetchData()} />;
+  }
 
   const activeRoadmap = roadmaps.find((r) => r.id === selectedRoadmapId) || roadmaps[0] || null;
 
@@ -854,6 +885,14 @@ export function App() {
         isLoading={false}
       />
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <DashboardContent />
+    </AuthProvider>
   );
 }
 

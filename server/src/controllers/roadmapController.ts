@@ -59,7 +59,7 @@ export async function generateRoadmapHandler(req: Request, res: Response, next: 
 
     const newRoadmap: Roadmap = {
       id: roadmapId,
-      userId: (req.headers['x-user-id'] as string) || 'user-demo-1',
+      userId: req.user?.id || (req.headers['x-user-id'] as string) || 'user-demo-1',
       title: `${validatedInput.skill} Mastery (${validatedInput.targetWeeks} Weeks)`,
       skillCategory: validatedInput.skill,
       targetGoal: validatedInput.targetGoal,
