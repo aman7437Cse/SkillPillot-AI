@@ -14,6 +14,8 @@ import type {
   ChatMessage,
   ConversationWithMessages,
   MessageRole,
+  QuizSession,
+  QuizAttempt,
 } from '../types/index.js';
 
 function calculateLevel(xp: number): StudentLevel {
@@ -65,6 +67,8 @@ class LocalDataStore {
   private studySessions: Map<string, StudySession[]> = new Map();
   private conversations: Map<string, Conversation> = new Map();
   private messages: Map<string, ChatMessage[]> = new Map();
+  private quizSessions: Map<string, QuizSession> = new Map();
+  private quizAttempts: Map<string, QuizAttempt[]> = new Map();
 
   constructor() {
     this.seedDefaultRoadmap();
@@ -1019,6 +1023,104 @@ export function TabsDemo() {
 
     conv.updatedAt = now;
     return newMsg;
+  }
+
+  // --- Quiz Session & Attempt Operations ---
+
+  public async saveQuizSession(session: QuizSession): Promise<QuizSession> {
+    this.quizSessions.set(session.id, session);
+    return session;
+  }
+
+  public async getQuizSession(sessionId: string): Promise<QuizSession | null> {
+    return this.quizSessions.get(sessionId) || null;
+  }
+
+  public async recordQuizAttempt(attempt: QuizAttempt): Promise<QuizAttempt> {
+    const userAttempts = this.quizAttempts.get(attempt.userId) || [];
+    userAttempts.unshift(attempt);
+    this.quizAttempts.set(attempt.userId, userAttempts);
+    return attempt;
+  }
+
+  public async listQuizAttempts(userId: string, topic?: string): Promise<QuizAttempt[]> {
+    const attempts = this.quizAttempts.get(userId) || [];
+    if (!topic) return attempts;
+    return attempts.filter((a) => a.topic.toLowerCase() === topic.toLowerCase());
+  }
+
+  public async updateSkillGapProficiency(
+    roadmapId: string,
+    topicName: string,
+    score: number
+  ): Promise<SkillGap | null> {
+    const roadmap = this.roadmaps.get(roadmapId);
+    if (!roadmap) return null;
+
+    let gap = roadmap.skillGaps.find(
+      (g) => g.topicName.toLowerCase() === topicName.toLowerCase()
+    );
+
+    const clampedScore = Math.min(100, Math.max(0, score));
+    const now = new Date().toISOString();
+    const status: 'mastered' | 'needs_review' | 'critical_blocker' =
+      clampedScore >= 80 ? 'mastered' : clampedScore >= 50 ? 'needs_review' : 'critical_blocker';
+
+    let recommendedAction = '';
+    if (status === 'mastered') {
+      recommendedAction = `Mastery achieved (${clampedScore}%). Continue to capstone projects.`;
+    } else if (status === 'needs_review') {
+      recommendedAction = `Score: ${clampedScore}%. Complete 1 micro-quiz review and trace practical code examples.`;
+    } else {
+      recommendedAction = `Bottleneck detected (${clampedScore}%). Step-by-step revision with AI Doubt Solver recommended.`;
+    }
+
+    if (gap) {
+      gap.proficiencyScore = clampedScore;
+      gap.status = status;
+      gap.recommendedAction = recommendedAction;
+      gap.lastEvaluatedAt = now;
+    } else {
+      gap = {
+        id: `gap-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        roadmapId,
+        topicName,
+        proficiencyScore: clampedScore,
+        status,
+        recommendedAction,
+        lastEvaluatedAt: now,
+      };
+      roadmap.skillGaps.push(gap);
+    }
+
+    roadmap.updatedAt = now;
+    return gap;
+  }
+
+  public async awardQuizXp(
+    userId: string,
+    roadmapId: string | undefined,
+    xp: number
+  ): Promise<{ totalXp: number }> {
+    if (xp <= 0) {
+      return { totalXp: 0 };
+    }
+
+    let targetRoadmap: Roadmap | undefined;
+    if (roadmapId) {
+      targetRoadmap = this.roadmaps.get(roadmapId);
+    } else {
+      // Find first roadmap for this user
+      targetRoadmap = Array.from(this.roadmaps.values()).find((r) => r.userId === userId);
+    }
+
+    if (targetRoadmap) {
+      targetRoadmap.totalXp = (targetRoadmap.totalXp || 0) + xp;
+      targetRoadmap.updatedAt = new Date().toISOString();
+      return { totalXp: targetRoadmap.totalXp };
+    }
+
+    return { totalXp: xp };
   }
 }
 

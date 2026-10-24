@@ -8,7 +8,12 @@ import type {
   QuizQuestion,
   FinalProject,
   TaskStatus,
-  LearningStyle
+  LearningStyle,
+  QuizQuestionItem,
+  QuizQuestionType,
+  QuizDifficulty,
+  DoubtSolverPayload,
+  DoubtSolverResponse
 } from '../types/index.js';
 
 let geminiClient: GoogleGenAI | null = null;
@@ -749,6 +754,194 @@ Return STRICT JSON:
   }
 }
 
+/**
+ * Adaptive Multi-Format Topic Quiz Generator
+ * Generates multiple-choice, true/false, and short-answer questions with difficulty adaptation.
+ */
+export async function generateAdaptiveTopicQuiz(options: {
+  topic: string;
+  skillCategory?: string;
+  difficulty?: QuizDifficulty;
+  questionCount?: number;
+  questionTypes?: QuizQuestionType[];
+}): Promise<QuizQuestionItem[]> {
+  const {
+    topic,
+    skillCategory = 'Software Engineering',
+    difficulty = 'intermediate',
+    questionCount = 5,
+    questionTypes = ['multiple_choice', 'true_false', 'short_answer'],
+  } = options;
+
+  const count = Math.min(10, Math.max(2, questionCount));
+  const types = questionTypes.length > 0 ? questionTypes : (['multiple_choice', 'true_false', 'short_answer'] as QuizQuestionType[]);
+
+  // 1. High-fidelity dynamic fallback generator
+  const generateFallbackQuiz = (): QuizQuestionItem[] => {
+    const questions: QuizQuestionItem[] = [];
+
+    // Helper templates
+    const templates = [
+      {
+        type: 'multiple_choice' as QuizQuestionType,
+        question: `In modern ${skillCategory}, what is the primary purpose and invariant of ${topic}?`,
+        options: [
+          `It enforces predictable data flow and isolates runtime failure domains.`,
+          `It completely bypasses error checking for higher throughput.`,
+          `It is purely a syntax decoration that compilers discard.`,
+          `It forces all operations to execute on the main CPU thread synchronously.`,
+        ],
+        correctOptionIndex: 0,
+        explanation: `${topic} is fundamentally designed to provide deterministic behavior, maintain system invariants, and prevent side-effects.`,
+        hint: `Think about system predictability and how state transitions are managed under failure.`,
+      },
+      {
+        type: 'true_false' as QuizQuestionType,
+        question: `True or False: When working with ${topic}, mutating shared references concurrently without synchronization can lead to non-deterministic race conditions.`,
+        options: ['True', 'False'],
+        correctOptionIndex: 0,
+        explanation: `True. Shared mutable state across concurrent execution contexts is the textbook definition of race conditions, leading to data corruption unless guarded.`,
+        hint: `Consider what happens when two independent routines attempt to write to the same memory or state simultaneously.`,
+      },
+      {
+        type: 'short_answer' as QuizQuestionType,
+        question: `In computational analysis of ${topic}, what is the standard worst-case time complexity of an unoptimized linear scan (express in standard Big-O notation)?`,
+        correctAnswer: 'O(n)',
+        explanation: `A linear scan over n elements requires inspecting each item sequentially once, resulting in O(n) worst-case time complexity.`,
+        hint: `Consider how the number of operations scales directly proportional to the input size n.`,
+      },
+      {
+        type: 'multiple_choice' as QuizQuestionType,
+        question: `Which architectural anti-pattern is most frequently encountered when improperly implementing ${topic}?`,
+        options: [
+          `Tight coupling where consumer components depend on internal implementation details.`,
+          `Employing static typing and unit test coverage.`,
+          `Writing self-documenting function names.`,
+          `Splitting complex procedures into single-responsibility helpers.`,
+        ],
+        correctOptionIndex: 0,
+        explanation: `Tight coupling breaks encapsulation, making refactoring brittle and cascading failures across unrelated modules.`,
+        hint: `Look for the choice that violates modular design and clean architecture principles.`,
+      },
+      {
+        type: 'true_false' as QuizQuestionType,
+        question: `True or False: In ${difficulty} level architectures, ${topic} should always be implemented as a monolithic singleton to maximize global accessibility.`,
+        options: ['True', 'False'],
+        correctOptionIndex: 1,
+        explanation: `False. Global singletons introduce hidden dependencies, hinder testability, and create synchronization bottlenecks. Dependency injection or modular scoping is favored.`,
+        hint: `Remember that global state makes testing and decoupling significantly harder.`,
+      },
+      {
+        type: 'short_answer' as QuizQuestionType,
+        question: `What fundamental programming paradigm emphasizes declaring 'what' should be computed rather than 'how' (step-by-step mutations) when dealing with ${topic}?`,
+        correctAnswer: 'Declarative',
+        explanation: `Declarative programming abstracts away explicit control flow and state mutations in favor of expressing desired outcomes.`,
+        hint: `The opposite of 'Imperative' programming.`,
+      },
+      {
+        type: 'multiple_choice' as QuizQuestionType,
+        question: `When optimizing ${topic} for production environments, what metric provides the most accurate measure of user-perceived performance?`,
+        options: [
+          `Latency percentiles (e.g. p95 and p99 response times) under peak load.`,
+          `The total number of lines of code in the repository.`,
+          `How quickly the dev server restarts locally.`,
+          `The raw number of git branches created per sprint.`,
+        ],
+        correctOptionIndex: 0,
+        explanation: `Tail latencies (p95, p99) represent real user experience at the extremes and expose architectural bottlenecks far better than averages.`,
+        hint: `Focus on metrics that reflect the slowest 1% to 5% of actual user requests.`,
+      },
+    ];
+
+    // Filter templates matching requested questionTypes if specified
+    const matchingTemplates = templates.filter((t) => types.includes(t.type));
+    const pool = matchingTemplates.length > 0 ? matchingTemplates : templates;
+
+    for (let i = 0; i < count; i++) {
+      const template = pool[i % pool.length];
+      questions.push({
+        id: `q-${difficulty}-${i + 1}-${Date.now().toString(36)}`,
+        topic,
+        question: template.question,
+        type: template.type,
+        options: template.options,
+        correctOptionIndex: template.correctOptionIndex,
+        correctAnswer: template.correctAnswer,
+        explanation: template.explanation,
+        hint: template.hint,
+      });
+    }
+
+    return questions;
+  };
+
+  // If Gemini is not configured, return high-fidelity fallback immediately
+  if (!geminiClient) {
+    return generateFallbackQuiz();
+  }
+
+  // 2. Query Gemini 2.5 Flash for live tailored questions
+  try {
+    const prompt = `You are a Principal Software Engineering Instructor creating an adaptive diagnostic quiz.
+Generate a ${count}-question quiz for the topic: "${topic}" (Skill Category: "${skillCategory}", Target Difficulty: "${difficulty}").
+Allowed Question Types: ${types.join(', ')}.
+
+Requirements:
+1. Provide practical, challenging questions that test real comprehension, edge cases, and common student pitfalls.
+2. Support question types:
+   - "multiple_choice": exactly 4 distinct, plausible options. "correctOptionIndex" must be 0, 1, 2, or 3.
+   - "true_false": options must be ["True", "False"]. "correctOptionIndex" must be 0 or 1.
+   - "short_answer": no options array. "correctAnswer" must be a concise, definitive string (1-3 words, acronym, or exact notation like "O(n)").
+3. Include an "explanation" detailing why the answer is correct and why other choices fail.
+4. Include an incremental "hint" providing a helpful conceptual clue without spoiling the direct answer.
+
+Return STRICT JSON ARRAY matching this schema:
+[
+  {
+    "id": "q-1",
+    "topic": "${topic}",
+    "question": "Question text",
+    "type": "multiple_choice",
+    "options": ["A", "B", "C", "D"],
+    "correctOptionIndex": 0,
+    "explanation": "Why A is correct and why B, C, D fail.",
+    "hint": "Conceptual hint without spoiling the answer."
+  }
+]`;
+
+    const response = await geminiClient.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        temperature: 0.3,
+      },
+    });
+
+    const parsed = JSON.parse(response.text?.trim() || '[]');
+    if (Array.isArray(parsed) && parsed.length >= 2) {
+      // Validate and clean each question item
+      const validated: QuizQuestionItem[] = parsed.slice(0, count).map((item, idx) => ({
+        id: item.id || `q-${idx + 1}-${Date.now().toString(36)}`,
+        topic: item.topic || topic,
+        question: String(item.question || `Question about ${topic}`),
+        type: (item.type === 'true_false' || item.type === 'short_answer' ? item.type : 'multiple_choice') as QuizQuestionType,
+        options: Array.isArray(item.options) ? item.options.map(String) : undefined,
+        correctOptionIndex: typeof item.correctOptionIndex === 'number' ? item.correctOptionIndex : undefined,
+        correctAnswer: typeof item.correctAnswer === 'string' ? item.correctAnswer : undefined,
+        explanation: String(item.explanation || 'Review the core documentation for this concept.'),
+        hint: typeof item.hint === 'string' ? item.hint : undefined,
+      }));
+      return validated;
+    }
+
+    return generateFallbackQuiz();
+  } catch (err) {
+    console.warn('Gemini adaptive quiz generation failed, using educational fallback:', err);
+    return generateFallbackQuiz();
+  }
+}
+
 export interface AssistantChatOptions {
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
   activeGoal?: string;
@@ -1044,4 +1237,311 @@ Tone & Style Guidelines:
     isAiGenerated: false,
   };
 }
+
+/**
+ * AI Doubt Solver Service
+ * Provides beginner-friendly explanations, progressive hints, code examples, and practice questions.
+ */
+export async function solveStudentDoubt(payload: DoubtSolverPayload): Promise<DoubtSolverResponse> {
+  const {
+    query,
+    topic = 'Software Engineering',
+    lessonTitle,
+    lessonContext,
+    actionType = 'general',
+    hintLevel = 1,
+  } = payload;
+
+  const effectiveHintLevel = Math.max(1, Math.min(4, hintLevel));
+  const totalHints = 3;
+  const hasMoreHints = effectiveHintLevel < totalHints;
+
+  // 1. Fallback deterministic generator
+  const generateFallbackDoubtReply = (): DoubtSolverResponse => {
+    let answer = '';
+    const followUps = [
+      `Can you show me a tricky edge case for ${topic}?`,
+      `How does this perform under high scale or large inputs?`,
+      `What is the most common anti-pattern students write here?`,
+    ];
+
+    if (actionType === 'explain_simply') {
+      answer = `### 🐣 Plain-English Breakdown: **${topic}**
+
+Imagine you are running a **busy restaurant kitchen**:
+- When orders arrive, if every chef yelled across the room to write in the same notebook without rules, orders would get lost, overwritten, or delayed (**unmanaged state and race conditions**).
+- Instead, the head chef sets up an **organized ticket rack** where each order has a unique ticket number, moves step-by-step from prep to cooking to plating, and only one station updates it at a time (**clean state transitions and isolation**).
+
+That is exactly what **${topic}** does in your code!
+1. **Clear Ownership**: Every piece of data has a single designated owner so nobody steps on each other's toes.
+2. **Predictable Flow**: Changes happen through explicit actions rather than random silent mutations.
+3. **Fail-Fast Safety**: If an ingredient or parameter is missing, the system catches it immediately rather than serving a broken dish to the user.
+
+> **Key Rule of Thumb**: Keep functions small, names explicit, and avoid global variables.`;
+    } else if (actionType === 'give_example') {
+      answer = `### 💡 Practical Step-by-Step Example: **${topic}**
+
+Here is a minimal, self-contained demonstration solving the core problem:
+
+\`\`\`typescript
+// Practical demonstration of ${topic}
+interface OperationResult<T> {
+  success: boolean;
+  data?: T;
+  errorMessage?: string;
+}
+
+// 1. Define invariant verification boundary
+function executeCleanOperation<T>(inputData: T): OperationResult<T> {
+  // Step 1: Guard clause to catch invalid edge cases early
+  if (!inputData) {
+    return {
+      success: false,
+      errorMessage: "Invalid payload: Input cannot be null or undefined",
+    };
+  }
+
+  // Step 2: Perform deterministic transformation
+  console.log("Processing payload safely with invariant checks...");
+  return {
+    success: true,
+    data: inputData,
+  };
+}
+
+// 2. Demonstration usage
+const result = executeCleanOperation({ topic: "${topic}", verified: true });
+console.log("Operation Status:", result.success ? "✓ OK" : "✗ Failed");
+\`\`\`
+
+#### Step-by-Step Execution Trace:
+1. **Guard Check**: The function checks input invariants before performing any heavy work.
+2. **Explicit Result Contract**: Notice how we return an explicit \`OperationResult\` object rather than throwing unhandled exceptions.
+3. **Predictable Call Site**: The caller easily checks \`result.success\` without guessing.`;
+    } else if (actionType === 'give_hint') {
+      if (effectiveHintLevel === 1) {
+        answer = `### 🔍 Guided Hint (Step 1 of 3): **Conceptual Direction**
+
+> *"Don't rush to write code just yet—let's clarify the mental model first."*
+
+1. Look closely at the **inputs and outputs** of the problem:
+   - What invariant must be true before the operation starts?
+   - What condition guarantees that the task has completed successfully?
+2. **Clue**: Think about whether you need to **track previously seen items** in constant time, or if ordering matters.
+3. Ask yourself: *"If you had to solve this manually on a whiteboard for just 3 items, what is the very first comparison you would make?"*
+
+*Ready for a structural hint? Click **"Next Hint (2/3)"** when you're ready!*`;
+      } else if (effectiveHintLevel === 2) {
+        answer = `### ⚡ Guided Hint (Step 2 of 3): **Structural & Algorithmic Clue**
+
+> *"Here is how to structure your algorithm without giving away the full code."*
+
+1. **Data Structure Choice**: A standard Array will require **O(n)** lookup time for each item. Could an auxiliary **Set** or **Map** give you **O(1)** instant lookups?
+2. **Loop Structure**:
+   - Initialize your tracker or boundary pointer outside the loop.
+   - Iterate through the elements one by one.
+   - For each element, check your condition against the tracker.
+3. **Edge Case**: What happens if the input is completely empty \`[]\`, or contains duplicates? Ensure your loop handles 0 or 1 element gracefully.
+
+*Need the exact code pattern? Click **"Reveal Solution"** to see the complete implementation.*`;
+      } else if (effectiveHintLevel === 3) {
+        answer = `### 🛠️ Guided Hint (Step 3 of 3): **Code Blueprint & Edge-Case Guard**
+
+> *"Almost there! Here is the skeleton of the solution to guide your hands on the keyboard."*
+
+\`\`\`typescript
+function solveProblem(input: any[]) {
+  // 1. Guard against empty input
+  if (!input || input.length === 0) return null;
+
+  // 2. Initialize lookup tracker
+  const seen = new Set();
+
+  for (const item of input) {
+    // 3. Invariant check: Did we meet our completion condition?
+    if (seen.has(item.key)) {
+      return item; // Found the match!
+    }
+    seen.add(item.key);
+  }
+
+  // 4. Fallback if no match was discovered
+  return null;
+}
+\`\`\`
+
+*Review how this blueprint maps to your current lesson task, then run your tests!*`;
+      } else {
+        answer = `### 🏆 Complete Solution & Walkthrough: **${topic}**
+
+Here is the complete, production-grade solution with full error handling and complexity analysis:
+
+\`\`\`typescript
+/**
+ * Complete reference implementation for ${topic}
+ * Time Complexity: O(n) linear scan
+ * Space Complexity: O(n) auxiliary memory
+ */
+export function solveTopicExercise<T extends { id: string | number }>(
+  items: T[],
+  predicate?: (item: T) => boolean
+): { matched: T[]; count: number } {
+  // Input validation
+  if (!Array.isArray(items)) {
+    throw new TypeError("Expected items to be an array");
+  }
+
+  const seenIds = new Set<string | number>();
+  const matched: T[] = [];
+
+  for (const item of items) {
+    if (!item || seenIds.has(item.id)) {
+      continue; // Skip invalid entries or duplicates
+    }
+
+    seenIds.add(item.id);
+
+    if (!predicate || predicate(item)) {
+      matched.push(item);
+    }
+  }
+
+  return {
+    matched,
+    count: matched.length,
+  };
+}
+\`\`\`
+
+#### Why this works:
+- **Zero Crashes**: Defensively validates input parameters.
+- **Deduplication**: Uses a Set to ensure every item is processed at most once.
+- **Fast**: Operates in single-pass linear time.`;
+      }
+    } else if (actionType === 'practice_question') {
+      answer = `### 🎯 Targeted Practice Challenge: **${topic}**
+
+Let's verify that you've got this concept down cold with a quick scenario:
+
+**Problem Statement:**
+> You have a service that receives stream payloads for **${topic}**. Some payloads arrive out of order, and some are duplicate retries from the client.
+>
+> 1. Which data structure should you use to reject duplicates in **O(1)** average time?
+> 2. How should you handle a payload that arrives before its prerequisite has been acknowledged?
+
+<details>
+<summary>👀 Click to reveal answer and self-check</summary>
+
+1. **Data Structure**: A **HashSet** (or Javascript \`Set\` / Hash Map) storing unique transaction IDs allows constant time O(1) duplicate checks.
+2. **Out-of-Order Handling**: Buffer out-of-order payloads into a staging priority queue or state map until the prerequisite message is acknowledged, then replay them sequentially.
+</details>`;
+    } else {
+      // General question
+      answer = `### 💡 Concept Guide: **${topic}**
+
+${lessonTitle ? `*Context: Current Lesson — **${lessonTitle}***\n\n` : ''}Regarding your question: *"**${query}**"*
+
+Here is what you need to know:
+1. **Core Mechanism**: **${topic}** establishes clean boundaries so that changes in one module do not cascade into unexpected bugs elsewhere.
+2. **Best Practice**:
+   - Always validate parameters at the boundary.
+   - Use descriptive names rather than obscure abbreviations.
+   - Prefer pure functions without hidden side effects.
+3. **Common Pitfall**: Trying to optimize prematurely before the architecture and data structures are correct. Write clean, working code first, then measure before refactoring.
+
+Use the quick action buttons below if you want an **example**, an **ELI5 explanation**, or a **progressive hint**!`;
+    }
+
+    return {
+      answer,
+      actionType,
+      hintLevel: effectiveHintLevel,
+      totalHints,
+      hasMoreHints,
+      followUpSuggestions: followUps,
+      provider: 'Deterministic Educational Engine (Local Demo)',
+      requiresVerification: true,
+      verificationNote: 'AI-generated tutor guidance • Verify language-specific nuances or compiler flags with primary documentation.',
+    };
+  };
+
+  if (!geminiClient) {
+    return generateFallbackDoubtReply();
+  }
+
+  // 2. Query Gemini 2.5 Flash
+  try {
+    const prompt = `You are an empathetic, world-class Senior Engineering Tutor for SkillPilot AI.
+Student Question: "${query}"
+Context Topic: "${topic}"
+${lessonTitle ? `Active Lesson: "${lessonTitle}"` : ''}
+${lessonContext ? `Lesson Context Summary: "${lessonContext}"` : ''}
+Requested Mode / Action: "${actionType}"
+Hint Level: ${effectiveHintLevel} (out of 3)
+
+Guidelines based on Action Mode:
+- If actionType is "explain_simply": Explain in beginner-friendly, plain English using a memorable real-life analogy (no intimidating jargon).
+- If actionType is "give_example": Provide clean, minimal, syntactically correct code with inline comments and execution trace.
+- If actionType is "give_hint":
+  * Level 1: Conceptual nudge only (no code, no spoiler).
+  * Level 2: Structural/algorithmic pattern clue.
+  * Level 3: Code blueprint and edge case warning.
+  * Level 4: Full solution with detailed reasoning.
+- If actionType is "practice_question": Generate a targeted self-check problem with a brief hidden answer key.
+- If actionType is "general": Provide direct, friendly, step-by-step guidance.
+
+Format your response in beautiful markdown with readable code blocks.
+At the very end of your response, output a JSON block wrapped in \`\`\`json containing exactly:
+{
+  "followUpSuggestions": ["Question 1?", "Question 2?", "Question 3?"]
+}
+`;
+
+    const response = await geminiClient.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        temperature: 0.35,
+      },
+    });
+
+    const fullText = response.text || '';
+    let cleanAnswer = fullText;
+    let followUps = [
+      `Can you show me a tricky edge case for ${topic}?`,
+      `How does this perform under high scale?`,
+      `What is the most common bug students write here?`,
+    ];
+
+    // Extract JSON block if present
+    const jsonMatch = fullText.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      try {
+        const parsedJson = JSON.parse(jsonMatch[1]);
+        if (Array.isArray(parsedJson.followUpSuggestions)) {
+          followUps = parsedJson.followUpSuggestions.slice(0, 3);
+        }
+        cleanAnswer = fullText.replace(/```json\s*[\s\S]*?\s*```/, '').trim();
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
+    return {
+      answer: cleanAnswer || generateFallbackDoubtReply().answer,
+      actionType,
+      hintLevel: effectiveHintLevel,
+      totalHints,
+      hasMoreHints,
+      followUpSuggestions: followUps,
+      provider: 'Google Gemini 2.5 Live',
+      requiresVerification: true,
+      verificationNote: 'AI-generated tutor guidance • Verify language-specific nuances or compiler flags with primary documentation.',
+    };
+  } catch (err) {
+    console.warn('Gemini doubt solving failed, falling back to local engine:', err);
+    return generateFallbackDoubtReply();
+  }
+}
+
 

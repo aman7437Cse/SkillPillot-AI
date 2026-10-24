@@ -13,7 +13,8 @@ import {
   Server,
   Lock,
   Trophy,
-  PlayCircle
+  PlayCircle,
+  HelpCircle
 } from 'lucide-react';
 
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -34,6 +35,8 @@ import { RoadmapGeneratorModal } from './components/features/RoadmapGeneratorMod
 import { PaceRecoveryModal } from './components/features/PaceRecoveryModal';
 import { TopicQuizModal } from './components/features/TopicQuizModal';
 import { TaskFocusModal } from './components/features/TaskFocusModal';
+import { DoubtSolverModal } from './components/doubt/DoubtSolverModal';
+import { AdaptiveQuizModal } from './components/quiz/AdaptiveQuizModal';
 import { fireCelebrationConfetti } from './lib/confetti';
 
 import { PersonalizedHeader } from './components/dashboard/PersonalizedHeader';
@@ -43,7 +46,7 @@ import { WeeklyActivityChart } from './components/dashboard/WeeklyActivityChart'
 import { TasksQueueTabs } from './components/dashboard/TasksQueueTabs';
 import { AssistantView } from './components/assistant/AssistantView';
 
-import type { Roadmap, Task, SkillGap, GenerateRoadmapPayload, HealthStatus, DashboardData } from './types';
+import type { Roadmap, Task, SkillGap, GenerateRoadmapPayload, HealthStatus, DashboardData, QuizAttempt } from './types';
 
 function DashboardContent() {
   const { user, isLoading: authLoading } = useAuth();
@@ -51,6 +54,15 @@ function DashboardContent() {
   // Navigation & View state
   const [activeTab, setActiveTab] = useState<'daily' | 'roadmap' | 'gaps' | 'assistant' | 'system'>('daily');
   const [assistantInitialPrompt, setAssistantInitialPrompt] = useState<string | null>(null);
+
+  // Doubt Solver & Adaptive Quiz state
+  const [isDoubtModalOpen, setIsDoubtModalOpen] = useState(false);
+  const [doubtTask, setDoubtTask] = useState<Task | null>(null);
+  const [doubtTopic, setDoubtTopic] = useState<string>('');
+  const [doubtInitialQuery, setDoubtInitialQuery] = useState<string>('');
+
+  const [isAdaptiveQuizOpen, setIsAdaptiveQuizOpen] = useState(false);
+  const [quizTopic, setQuizTopic] = useState<string>('');
   
   // Data state
   const [roadmaps, setRoadmaps] = useState<Roadmap[]>([]);
@@ -334,6 +346,36 @@ function DashboardContent() {
     setActiveTab('assistant');
   };
 
+  const handleOpenDoubtSolver = (taskOrTopic?: Task | string, query?: string) => {
+    if (typeof taskOrTopic === 'object' && taskOrTopic !== null) {
+      setDoubtTask(taskOrTopic);
+      setDoubtTopic(taskOrTopic.title);
+    } else if (typeof taskOrTopic === 'string') {
+      setDoubtTask(null);
+      setDoubtTopic(taskOrTopic);
+    } else {
+      setDoubtTask(currentActionTask);
+      setDoubtTopic(currentActionTask?.title || activeRoadmap?.skillCategory || '');
+    }
+    setDoubtInitialQuery(query || '');
+    setIsDoubtModalOpen(true);
+  };
+
+  const handleLaunchAdaptiveQuiz = (topic?: string) => {
+    setQuizTopic(topic || '');
+    setIsAdaptiveQuizOpen(true);
+  };
+
+  const handleQuizCompleted = async (_attempt: QuizAttempt) => {
+    if (activeRoadmap) {
+      await fetchDashboard(activeRoadmap.id);
+      const updatedRoadmaps = await api.getRoadmaps().catch(() => []);
+      if (updatedRoadmaps.length > 0) {
+        setRoadmaps(updatedRoadmaps);
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col font-sans">
       {/* Top Navigation */}
@@ -341,6 +383,8 @@ function DashboardContent() {
         activeRoadmap={activeRoadmap}
         onOpenGenerator={() => setIsGeneratorOpen(true)}
         onOpenAssistant={() => setActiveTab('assistant')}
+        onOpenDoubtSolver={() => handleOpenDoubtSolver(currentActionTask || undefined)}
+        onOpenQuiz={() => handleLaunchAdaptiveQuiz()}
         isBackendHealthy={Boolean(health && health.status === 'healthy')}
       />
 
@@ -886,16 +930,27 @@ function DashboardContent() {
                       Targeted assessments to detect conceptual weaknesses and unblock your progress.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="flex items-center gap-1.5 text-rose-400 font-medium">
-                      <span className="w-2 h-2 rounded-full bg-rose-500" /> Blocker
-                    </span>
-                    <span className="flex items-center gap-1.5 text-amber-400 font-medium">
-                      <span className="w-2 h-2 rounded-full bg-amber-500" /> Needs Review
-                    </span>
-                    <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" /> Mastered
-                    </span>
+                  <div className="flex items-center gap-3">
+                    <div className="hidden sm:flex items-center gap-2 text-xs">
+                      <span className="flex items-center gap-1.5 text-rose-400 font-medium">
+                        <span className="w-2 h-2 rounded-full bg-rose-500" /> Blocker
+                      </span>
+                      <span className="flex items-center gap-1.5 text-amber-400 font-medium">
+                        <span className="w-2 h-2 rounded-full bg-amber-500" /> Needs Review
+                      </span>
+                      <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" /> Mastered
+                      </span>
+                    </div>
+
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      onClick={() => handleLaunchAdaptiveQuiz()}
+                      leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+                    >
+                      Adaptive Quiz
+                    </Button>
                   </div>
                 </div>
 
@@ -926,17 +981,28 @@ function DashboardContent() {
                           </p>
                         </div>
 
-                        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                          <span className="text-[11px] text-slate-500">
-                            Last checked: {new Date(gap.lastEvaluatedAt).toLocaleDateString()}
-                          </span>
+                        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleOpenDoubtSolver(
+                                gap.topicName,
+                                `Can you explain the core concepts of "${gap.topicName}" simply, provide a real-life analogy, and walk me through a clear example?`
+                              )
+                            }
+                            leftIcon={<HelpCircle className="w-3.5 h-3.5 text-amber-400" />}
+                            className="text-amber-300 hover:text-amber-200"
+                          >
+                            Doubt Solver
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setActiveQuizGap(gap)}
+                            onClick={() => handleLaunchAdaptiveQuiz(gap.topicName)}
                             leftIcon={<Award className="w-3.5 h-3.5 text-indigo-400" />}
                           >
-                            Practice Quiz
+                            Adaptive Quiz
                           </Button>
                         </div>
                       </Card>
@@ -1062,7 +1128,34 @@ function DashboardContent() {
         onReschedule={handleRescheduleTask}
         onNextStep={handleNextStep}
         onAskAi={handleAskAiAboutTask}
+        onOpenDoubtSolver={(task) => handleOpenDoubtSolver(task)}
+        onLaunchQuiz={(topic) => handleLaunchAdaptiveQuiz(topic)}
         isLoading={false}
+      />
+
+      <DoubtSolverModal
+        isOpen={isDoubtModalOpen}
+        onClose={() => setIsDoubtModalOpen(false)}
+        currentTask={doubtTask}
+        activeTopic={doubtTopic}
+        initialQuery={doubtInitialQuery}
+        roadmapId={activeRoadmap?.id}
+        onReturnToLesson={(task) => {
+          setIsDoubtModalOpen(false);
+          setFocusedTask(task);
+        }}
+      />
+
+      <AdaptiveQuizModal
+        isOpen={isAdaptiveQuizOpen}
+        onClose={() => setIsAdaptiveQuizOpen(false)}
+        roadmap={activeRoadmap}
+        initialTopic={quizTopic}
+        onOpenDoubtSolver={(questionText, topic) => {
+          setIsAdaptiveQuizOpen(false);
+          handleOpenDoubtSolver(topic, questionText);
+        }}
+        onQuizCompleted={handleQuizCompleted}
       />
 
       {activeRoadmap && (

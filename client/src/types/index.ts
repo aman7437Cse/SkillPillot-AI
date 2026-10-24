@@ -238,3 +238,105 @@ export interface AssistantStreamEvent {
   provider?: string;
 }
 
+// Adaptive Topic Quiz Generator Types
+export type QuizQuestionType = 'multiple_choice' | 'true_false' | 'short_answer';
+export type QuizDifficulty = 'beginner' | 'intermediate' | 'advanced' | 'adaptive';
+
+export interface QuizQuestionItem {
+  id: string;
+  topic: string;
+  question: string;
+  type: QuizQuestionType;
+  options?: string[];
+  correctOptionIndex?: number;
+  correctAnswer?: string;
+  explanation: string;
+  hint?: string;
+}
+
+export interface SanitizedQuizQuestion {
+  id: string;
+  topic: string;
+  question: string;
+  type: QuizQuestionType;
+  options?: string[];
+}
+
+export interface QuizSession {
+  id: string;
+  userId: string;
+  roadmapId?: string;
+  topic: string;
+  skillCategory?: string;
+  difficulty: QuizDifficulty;
+  questionCount: number;
+  questionTypes: QuizQuestionType[];
+  questions: SanitizedQuizQuestion[];
+  createdAt: string;
+}
+
+export interface QuizQuestionResult {
+  questionId: string;
+  question: string;
+  type: QuizQuestionType;
+  userAnswer: string | number;
+  correctAnswer: string | number;
+  isCorrect: boolean;
+  explanation: string;
+}
+
+export interface QuizAttempt {
+  id: string;
+  sessionId: string;
+  userId: string;
+  roadmapId?: string;
+  topic: string;
+  difficulty: QuizDifficulty;
+  scorePercentage: number;
+  totalQuestions: number;
+  correctCount: number;
+  earnedXp: number;
+  questionResults: QuizQuestionResult[];
+  masteryStatus: 'mastered' | 'needs_review' | 'critical_blocker';
+  createdAt: string;
+}
+
+export interface GenerateQuizPayload {
+  topic: string;
+  roadmapId?: string;
+  skillCategory?: string;
+  difficulty?: QuizDifficulty;
+  questionCount?: number;
+  questionTypes?: QuizQuestionType[];
+}
+
+export interface SubmitQuizPayload {
+  answers: Record<string, string | number>;
+}
+
+// AI Doubt Solver Types
+export type DoubtActionType = 'explain_simply' | 'give_example' | 'give_hint' | 'practice_question' | 'general';
+
+export interface DoubtSolverPayload {
+  query: string;
+  topic?: string;
+  roadmapId?: string;
+  lessonTitle?: string;
+  lessonContext?: string;
+  actionType?: DoubtActionType;
+  hintLevel?: number;
+}
+
+export interface DoubtSolverResponse {
+  answer: string;
+  actionType: DoubtActionType;
+  hintLevel?: number;
+  totalHints?: number;
+  hasMoreHints?: boolean;
+  followUpSuggestions: string[];
+  provider: string;
+  requiresVerification: boolean;
+  verificationNote?: string;
+}
+
+

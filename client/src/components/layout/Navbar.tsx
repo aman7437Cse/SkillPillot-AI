@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { Compass, Sparkles, Flame, Zap, CheckCircle2, AlertCircle, LogOut, ChevronDown } from 'lucide-react';
+import {
+  Compass,
+  Sparkles,
+  Flame,
+  Zap,
+  CheckCircle2,
+  AlertCircle,
+  LogOut,
+  ChevronDown,
+  HelpCircle,
+  Award
+} from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import type { Roadmap } from '../../types';
@@ -8,6 +19,8 @@ export interface NavbarProps {
   activeRoadmap: Roadmap | null;
   onOpenGenerator: () => void;
   onOpenAssistant?: () => void;
+  onOpenDoubtSolver?: () => void;
+  onOpenQuiz?: () => void;
   isBackendHealthy: boolean;
 }
 
@@ -15,6 +28,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeRoadmap,
   onOpenGenerator,
   onOpenAssistant,
+  onOpenDoubtSolver,
+  onOpenQuiz,
   isBackendHealthy,
 }) => {
   const { user, logout, isConfiguredWithSupabase } = useAuth();
@@ -95,6 +110,34 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <span className="hidden sm:inline">AI Tutor</span>
               <span className="sm:hidden">AI</span>
+            </Button>
+          )}
+
+          {/* AI Doubt Solver CTA */}
+          {onOpenDoubtSolver && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenDoubtSolver}
+              leftIcon={<HelpCircle className="w-3.5 h-3.5 text-amber-400" />}
+              className="border-amber-500/30 hover:border-amber-500/60 bg-amber-950/20 text-amber-300"
+            >
+              <span className="hidden md:inline">Doubt Solver</span>
+              <span className="md:hidden">Doubt</span>
+            </Button>
+          )}
+
+          {/* Adaptive Quiz CTA */}
+          {onOpenQuiz && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenQuiz}
+              leftIcon={<Award className="w-3.5 h-3.5 text-violet-400" />}
+              className="border-violet-500/30 hover:border-violet-500/60 bg-violet-950/20 text-violet-300"
+            >
+              <span className="hidden md:inline">Adaptive Quiz</span>
+              <span className="md:hidden">Quiz</span>
             </Button>
           )}
 

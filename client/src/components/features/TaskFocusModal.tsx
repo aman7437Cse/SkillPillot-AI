@@ -30,6 +30,8 @@ export interface TaskFocusModalProps {
   onReschedule?: (task: Task, newDayNumber: number) => Promise<void>;
   onNextStep?: () => void;
   onAskAi?: (task: Task) => void;
+  onOpenDoubtSolver?: (task: Task) => void;
+  onLaunchQuiz?: (topic: string) => void;
   isLoading: boolean;
 }
 
@@ -42,6 +44,8 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
   onReschedule,
   onNextStep,
   onAskAi,
+  onOpenDoubtSolver,
+  onLaunchQuiz,
   isLoading,
 }) => {
   const initialSeconds = (task?.estimatedMinutes || 25) * 60;
@@ -368,7 +372,20 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {onAskAi && (
+            {onOpenDoubtSolver ? (
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => {
+                  onClose();
+                  onOpenDoubtSolver(task);
+                }}
+                leftIcon={<Lightbulb className="w-4 h-4 text-amber-400" />}
+                className="border-amber-500/30 text-amber-300 hover:text-amber-200"
+              >
+                AI Doubt Solver
+              </Button>
+            ) : onAskAi ? (
               <Button
                 variant="outline"
                 size="md"
@@ -380,6 +397,21 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
                 className="border-indigo-500/30 text-indigo-300 hover:text-indigo-200"
               >
                 Ask AI Tutor
+              </Button>
+            ) : null}
+
+            {onLaunchQuiz && (
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => {
+                  onClose();
+                  onLaunchQuiz(task.title);
+                }}
+                leftIcon={<Award className="w-4 h-4 text-violet-400" />}
+                className="border-violet-500/30 text-violet-300 hover:text-violet-200"
+              >
+                Take Quiz
               </Button>
             )}
             <Button variant="ghost" size="md" onClick={onClose}>

@@ -5,6 +5,8 @@ import morgan from 'morgan';
 import { config } from './config/env.js';
 import roadmapRoutes from './routes/roadmapRoutes.js';
 import assistantRoutes from './routes/assistantRoutes.js';
+import quizRoutes from './routes/quizRoutes.js';
+import doubtRoutes from './routes/doubtRoutes.js';
 import { getHealthStatus } from './controllers/healthController.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import { authenticateRequest } from './middleware/authMiddleware.js';
@@ -27,6 +29,8 @@ app.get('/api/health', getHealthStatus);
 // Core API routes
 app.use('/api/roadmaps', roadmapRoutes);
 app.use('/api/assistant', assistantRoutes);
+app.use('/api/quizzes', quizRoutes);
+app.use('/api/doubts', doubtRoutes);
 
 // Fallback handlers
 app.use(notFoundHandler);

@@ -12,6 +12,12 @@ import type {
   ChatMessage,
   ConversationWithMessages,
   SendMessagePayload,
+  QuizAttempt,
+  GenerateQuizPayload,
+  SubmitQuizPayload,
+  SanitizedQuizQuestion,
+  DoubtSolverPayload,
+  DoubtSolverResponse,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
@@ -309,4 +315,63 @@ export const api = {
       onError(err);
     }
   },
+
+  // Adaptive Topic Quiz Generator
+  async generateAdaptiveQuiz(payload: GenerateQuizPayload): Promise<{
+    sessionId: string;
+    topic: string;
+    difficulty: string;
+    questionCount: number;
+    questions: SanitizedQuizQuestion[];
+    createdAt: string;
+  }> {
+    const res = await fetchJson<{
+      success: boolean;
+      data: {
+        sessionId: string;
+        topic: string;
+        difficulty: string;
+        questionCount: number;
+        questions: SanitizedQuizQuestion[];
+        createdAt: string;
+      };
+    }>(`${API_BASE}/quizzes/generate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+
+  async submitQuizAnswers(sessionId: string, payload: SubmitQuizPayload): Promise<QuizAttempt> {
+    const res = await fetchJson<{
+      success: boolean;
+      data: QuizAttempt;
+    }>(`${API_BASE}/quizzes/${sessionId}/submit`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+
+  async getQuizHistory(topic?: string): Promise<QuizAttempt[]> {
+    const query = topic ? `?topic=${encodeURIComponent(topic)}` : '';
+    const res = await fetchJson<{
+      success: boolean;
+      data: QuizAttempt[];
+    }>(`${API_BASE}/quizzes/history${query}`);
+    return res.data;
+  },
+
+  // AI Doubt Solver
+  async solveStudentDoubt(payload: DoubtSolverPayload): Promise<DoubtSolverResponse> {
+    const res = await fetchJson<{
+      success: boolean;
+      data: DoubtSolverResponse;
+    }>(`${API_BASE}/doubts/solve`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
 };
+

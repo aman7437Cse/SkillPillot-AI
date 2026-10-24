@@ -212,4 +212,48 @@ CREATE POLICY "Users can create messages in their conversations" ON public.messa
   EXISTS (SELECT 1 FROM public.conversations WHERE id = messages.conversation_id AND user_id = auth.uid())
 );
 
+-- 13. Quiz Sessions & Attempts Tables
+CREATE TABLE IF NOT EXISTS public.quiz_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  roadmap_id UUID REFERENCES public.roadmaps(id) ON DELETE SET NULL,
+  topic TEXT NOT NULL,
+  skill_category TEXT,
+  difficulty TEXT NOT NULL DEFAULT 'intermediate',
+  question_count INTEGER NOT NULL DEFAULT 5,
+  question_types JSONB DEFAULT '["multiple_choice"]'::jsonb,
+  questions JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.quiz_attempts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  session_id UUID NOT NULL REFERENCES public.quiz_sessions(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  roadmap_id UUID REFERENCES public.roadmaps(id) ON DELETE SET NULL,
+  topic TEXT NOT NULL,
+  difficulty TEXT NOT NULL,
+  score_percentage INTEGER NOT NULL,
+  total_questions INTEGER NOT NULL,
+  correct_count INTEGER NOT NULL,
+  earned_xp INTEGER NOT NULL DEFAULT 0,
+  question_results JSONB NOT NULL,
+  mastery_status TEXT NOT NULL DEFAULT 'needs_review',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_quiz_sessions_user_id ON public.quiz_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_user_id ON public.quiz_attempts(user_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_topic ON public.quiz_attempts(topic);
+
+ALTER TABLE public.quiz_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quiz_attempts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own quiz sessions" ON public.quiz_sessions FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can create quiz sessions" ON public.quiz_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can view their own quiz attempts" ON public.quiz_attempts FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can record quiz attempts" ON public.quiz_attempts FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+
 
