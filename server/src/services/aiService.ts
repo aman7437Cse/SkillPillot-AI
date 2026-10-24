@@ -406,7 +406,24 @@ function generateDeterministicRoadmap(input: GenerateRoadmapInput, roadmapId: st
         isOverdue: false,
         isMilestone: isPhaseMilestone,
         isFinalProject: isFinalPhaseTask,
-        prerequisiteTaskIds: prevTaskId ? [prevTaskId] : []
+        prerequisiteTaskIds: prevTaskId ? [prevTaskId] : [],
+        learningObjectives: [
+          `Understand core concepts of ${topic.title} in ${input.skill}`,
+          `Implement practical code solutions without unhandled exceptions`,
+          `Analyze trade-offs and performance implications`
+        ],
+        completionCriteria: [
+          `Review the bite-sized concept summary and key takeaways`,
+          `Complete today's practical mission: ${topic.exercise.slice(0, 80)}...`,
+          `Reflect on key learnings or record study notes`
+        ],
+        practiceQuestions: [
+          {
+            question: `In modern ${input.skill}, what is the main problem solved by ${topic.title}?`,
+            answerHint: `Focus on clarity, maintainability, and resource safety in production.`
+          }
+        ],
+        rescheduledCount: 0
       };
 
       return task;
@@ -598,7 +615,24 @@ OUTPUT STRICTLY VALID JSON MATCHING THIS SCHEMA:
             isOverdue: false,
             isMilestone: Boolean(t.isMilestone),
             isFinalProject: Boolean(t.isFinalProject),
-            prerequisiteTaskIds: prevId ? [prevId] : []
+            prerequisiteTaskIds: prevId ? [prevId] : [],
+            learningObjectives: Array.isArray(t.learningObjectives) ? t.learningObjectives : [
+              `Master the essential principles of ${t.title || 'today lesson'}`,
+              `Apply concepts in code without regressions`,
+              `Build muscle memory with hands-on practice`
+            ],
+            completionCriteria: Array.isArray(t.completionCriteria) ? t.completionCriteria : [
+              `Review the concept summary and key takeaways`,
+              `Complete the hands-on practical exercise`,
+              `Demonstrate understanding of the key concepts`
+            ],
+            practiceQuestions: Array.isArray(t.practiceQuestions) ? t.practiceQuestions : [
+              {
+                question: `What is the primary practical value of ${t.title || 'this topic'}?`,
+                answerHint: `Focus on architectural clarity, reliability, and maintainability.`
+              }
+            ],
+            rescheduledCount: 0
           };
         })
       };

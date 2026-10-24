@@ -11,7 +11,9 @@ import {
   Lightbulb,
   Lock,
   Award,
-  Sparkles
+  Sparkles,
+  Check,
+  HelpCircle
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -24,6 +26,9 @@ export interface TaskFocusModalProps {
   onClose: () => void;
   task: Task | null;
   onToggleComplete: (task: Task) => Promise<void>;
+  onStartSession?: (task: Task, minutes: number) => Promise<void>;
+  onReschedule?: (task: Task, newDayNumber: number) => Promise<void>;
+  onNextStep?: () => void;
   isLoading: boolean;
 }
 
@@ -32,18 +37,24 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
   onClose,
   task,
   onToggleComplete,
+  onStartSession,
+  onReschedule,
+  onNextStep,
   isLoading,
 }) => {
   const initialSeconds = (task?.estimatedMinutes || 25) * 60;
   const [timeLeft, setTimeLeft] = useState(initialSeconds);
   const [isRunning, setIsRunning] = useState(false);
   const [exerciseNotes, setExerciseNotes] = useState('');
+  const [expandedHint, setExpandedHint] = useState<number | null>(null);
+  const [isRescheduling, setIsRescheduling] = useState(false);
 
   useEffect(() => {
     if (task) {
       setTimeLeft((task.estimatedMinutes || 25) * 60);
       setIsRunning(false);
       setExerciseNotes('');
+      setExpandedHint(null);
     }
   }, [task]);
 
@@ -66,12 +77,30 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
   const seconds = timeLeft % 60;
   const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
+  const handleToggleTimer = () => {
+    if (!isRunning && onStartSession) {
+      onStartSession(task, Math.round(((task.estimatedMinutes || 25) * 60 - timeLeft) / 60) || 5);
+    }
+    setIsRunning(!isRunning);
+  };
+
   const handleCompleteClick = async () => {
     if (!task.isCompleted) {
       fireCelebrationConfetti();
     }
     await onToggleComplete(task);
     onClose();
+  };
+
+  const handleQuickReschedule = async () => {
+    if (!onReschedule) return;
+    setIsRescheduling(true);
+    try {
+      await onReschedule(task, task.dayNumber + 1);
+      onClose();
+    } finally {
+      setIsRescheduling(false);
+    }
   };
 
   return (
@@ -84,34 +113,58 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
     >
       <div className="space-y-5 pt-1">
         {/* Status & Milestone Tags */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {task.status === 'completed' && (
-            <Badge variant="emerald" size="sm" dot>
-              Completed
-            </Badge>
-          )}
-          {task.status === 'current' && (
-            <Badge variant="indigo" size="sm" dot>
-              Current Active Mission
-            </Badge>
-          )}
-          {task.status === 'locked' && (
-            <Badge variant="amber" size="sm">
-              <Lock className="w-3 h-3 mr-1 inline" />
-              Locked Prerequisite
-            </Badge>
-          )}
-          {task.isMilestone && (
-            <Badge variant="violet" size="sm">
-              <Award className="w-3 h-3 mr-1 inline" />
-              Phase Milestone
-            </Badge>
-          )}
-          {task.isFinalProject && (
-            <Badge variant="cyan" size="sm">
-              <Sparkles className="w-3 h-3 mr-1 inline" />
-              Capstone Project
-            </Badge>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            {task.status === 'completed' && (
+              <Badge variant="emerald" size="sm" dot>
+                Completed
+              </Badge>
+            )}
+            {task.status === 'in_progress' && (
+              <Badge variant="emerald" size="sm" dot>
+                In Progress
+              </Badge>
+            )}
+            {task.status === 'current' && (
+              <Badge variant="indigo" size="sm" dot>
+                Ready to Start
+              </Badge>
+            )}
+            {task.status === 'overdue' && (
+              <Badge variant="amber" size="sm">
+                Overdue
+              </Badge>
+            )}
+            {task.status === 'locked' && (
+              <Badge variant="amber" size="sm">
+                <Lock className="w-3 h-3 mr-1 inline" />
+                Locked Prerequisite
+              </Badge>
+            )}
+            {task.isMilestone && (
+              <Badge variant="violet" size="sm">
+                <Award className="w-3 h-3 mr-1 inline" />
+                Phase Milestone
+              </Badge>
+            )}
+            {task.isFinalProject && (
+              <Badge variant="cyan" size="sm">
+                <Sparkles className="w-3 h-3 mr-1 inline" />
+                Capstone Project
+              </Badge>
+            )}
+          </div>
+
+          {onReschedule && !task.isCompleted && (
+            <button
+              type="button"
+              onClick={handleQuickReschedule}
+              disabled={isRescheduling}
+              className="text-slate-400 hover:text-slate-200 text-xs flex items-center gap-1 transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" />
+              {isRescheduling ? 'Rescheduling...' : 'Reschedule to Tomorrow'}
+            </button>
           )}
         </div>
 
@@ -146,7 +199,7 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
               type="button"
               variant={isRunning ? 'secondary' : 'primary'}
               size="sm"
-              onClick={() => setIsRunning(!isRunning)}
+              onClick={handleToggleTimer}
               leftIcon={isRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
             >
               {isRunning ? 'Pause' : 'Start Lesson Timer'}
@@ -166,10 +219,28 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
           </div>
         </div>
 
+        {/* Learning Objectives */}
+        {task.learningObjectives && task.learningObjectives.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+              <Lightbulb className="w-3.5 h-3.5" />
+              Learning Objectives
+            </h4>
+            <ul className="space-y-1.5 p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+              {task.learningObjectives.map((obj, idx) => (
+                <li key={idx} className="flex items-start gap-2 text-xs text-slate-300">
+                  <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
+                  <span>{obj}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Concept Summary */}
         <div className="space-y-2">
-          <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-300">
-            <Lightbulb className="w-3.5 h-3.5" />
+          <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-300">
+            <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
             Bite-Sized Mental Model
           </h4>
           <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs sm:text-sm text-slate-300 leading-relaxed">
@@ -193,6 +264,55 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
             className="w-full h-20 p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
           />
         </div>
+
+        {/* Completion Criteria */}
+        {task.completionCriteria && task.completionCriteria.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-300">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Actionable Completion Criteria
+            </h4>
+            <ul className="space-y-1.5 p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+              {task.completionCriteria.map((crit, idx) => (
+                <li key={idx} className="flex items-start gap-2 text-xs text-slate-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-1.5" />
+                  <span>{crit}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Practice Questions & Knowledge Drill */}
+        {task.practiceQuestions && task.practiceQuestions.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-300">
+              <HelpCircle className="w-3.5 h-3.5" />
+              Practice Drill & Knowledge Check
+            </h4>
+            <div className="space-y-2">
+              {task.practiceQuestions.map((q, idx) => (
+                <div key={idx} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                  <p className="text-xs font-semibold text-slate-200">Q: {q.question}</p>
+                  {q.answerHint && (
+                    <button
+                      type="button"
+                      onClick={() => setExpandedHint(expandedHint === idx ? null : idx)}
+                      className="text-[11px] text-amber-400 hover:text-amber-300 font-medium flex items-center gap-1"
+                    >
+                      {expandedHint === idx ? 'Hide Hint' : '💡 Show Answer Hint'}
+                    </button>
+                  )}
+                  {expandedHint === idx && q.answerHint && (
+                    <p className="text-[11px] text-slate-300 bg-slate-900/90 p-2.5 rounded-lg border border-slate-800 italic">
+                      {q.answerHint}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Key Takeaways */}
         {task.keyTakeaways && task.keyTakeaways.length > 0 && (
@@ -249,6 +369,18 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
             <Button variant="ghost" size="md" onClick={onClose}>
               Close
             </Button>
+            {task.isCompleted && onNextStep && (
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => {
+                  onClose();
+                  onNextStep();
+                }}
+              >
+                Next Step
+              </Button>
+            )}
             <Button
               variant={task.isCompleted ? 'secondary' : 'accent'}
               size="md"

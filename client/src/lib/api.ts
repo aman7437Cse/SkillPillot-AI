@@ -1,4 +1,14 @@
-import type { Roadmap, Task, SkillGap, QuizQuestion, GenerateRoadmapPayload, HealthStatus } from '../types';
+import type {
+  Roadmap,
+  Task,
+  SkillGap,
+  QuizQuestion,
+  GenerateRoadmapPayload,
+  HealthStatus,
+  DashboardData,
+  StudySession,
+  TaskStatus,
+} from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -10,6 +20,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
       const parsed = JSON.parse(rawSession);
       if (parsed.id) {
         authHeaders['x-user-id'] = parsed.id;
+        authHeaders['x-user-name'] = parsed.fullName || 'Student';
         authHeaders['Authorization'] = `Bearer simulated-jwt-${parsed.id}`;
       }
     }
@@ -114,6 +125,46 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify({ gapId, score }),
+      }
+    );
+    return res.data;
+  },
+
+  async getDashboard(roadmapId: string): Promise<DashboardData> {
+    const res = await fetchJson<{ success: boolean; data: DashboardData }>(
+      `${API_BASE}/roadmaps/${roadmapId}/dashboard`
+    );
+    return res.data;
+  },
+
+  async recordStudySession(roadmapId: string, taskId: string, durationMinutes: number, xpEarned = 25): Promise<StudySession> {
+    const res = await fetchJson<{ success: boolean; data: StudySession }>(
+      `${API_BASE}/roadmaps/${roadmapId}/tasks/${taskId}/session`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ durationMinutes, xpEarned }),
+      }
+    );
+    return res.data;
+  },
+
+  async updateTaskStatus(roadmapId: string, taskId: string, status: TaskStatus): Promise<{ task: Task; roadmap: Roadmap }> {
+    const res = await fetchJson<{ success: boolean; data: { task: Task; roadmap: Roadmap } }>(
+      `${API_BASE}/roadmaps/${roadmapId}/tasks/${taskId}/status`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }
+    );
+    return res.data;
+  },
+
+  async rescheduleTask(roadmapId: string, taskId: string, newDayNumber: number): Promise<{ task: Task; roadmap: Roadmap }> {
+    const res = await fetchJson<{ success: boolean; data: { task: Task; roadmap: Roadmap } }>(
+      `${API_BASE}/roadmaps/${roadmapId}/tasks/${taskId}/reschedule`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ newDayNumber }),
       }
     );
     return res.data;

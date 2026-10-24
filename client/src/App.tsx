@@ -2,22 +2,16 @@ import { useState, useEffect } from 'react';
 import {
   Compass,
   Sparkles,
-  Flame,
-  Zap,
   CheckCircle2,
   Sliders,
   Award,
   Layers,
-  ArrowRight,
   Target,
-  Clock,
   Check,
-  Terminal,
   ChevronDown,
   ChevronRight,
   Server,
   Lock,
-  RefreshCw,
   Trophy,
   PlayCircle
 } from 'lucide-react';
@@ -42,7 +36,13 @@ import { TopicQuizModal } from './components/features/TopicQuizModal';
 import { TaskFocusModal } from './components/features/TaskFocusModal';
 import { fireCelebrationConfetti } from './lib/confetti';
 
-import type { Roadmap, Task, SkillGap, GenerateRoadmapPayload, HealthStatus } from './types';
+import { PersonalizedHeader } from './components/dashboard/PersonalizedHeader';
+import { ContinueLearningCard } from './components/dashboard/ContinueLearningCard';
+import { TodayLearningPlan } from './components/dashboard/TodayLearningPlan';
+import { WeeklyActivityChart } from './components/dashboard/WeeklyActivityChart';
+import { TasksQueueTabs } from './components/dashboard/TasksQueueTabs';
+
+import type { Roadmap, Task, SkillGap, GenerateRoadmapPayload, HealthStatus, DashboardData } from './types';
 
 function DashboardContent() {
   const { user, isLoading: authLoading } = useAuth();
@@ -53,6 +53,8 @@ function DashboardContent() {
   // Data state
   const [roadmaps, setRoadmaps] = useState<Roadmap[]>([]);
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<string>('');
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [isDashboardLoading, setIsDashboardLoading] = useState<boolean>(false);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +73,19 @@ function DashboardContent() {
   // Filter for roadmap view
   const [roadmapFilter, setRoadmapFilter] = useState<'all' | 'pending' | 'completed' | 'essential'>('all');
 
+  // Fetch dashboard data
+  const fetchDashboard = async (roadmapId: string) => {
+    try {
+      setIsDashboardLoading(true);
+      const data = await api.getDashboard(roadmapId);
+      setDashboardData(data);
+    } catch (err: any) {
+      console.error('Failed to fetch dashboard data:', err);
+    } finally {
+      setIsDashboardLoading(false);
+    }
+  };
+
   // Load initial data
   const fetchData = async () => {
     setIsLoading(true);
@@ -84,11 +99,13 @@ function DashboardContent() {
       setHealth(healthData);
       setRoadmaps(roadmapsData);
       if (roadmapsData.length > 0) {
-        setSelectedRoadmapId(roadmapsData[0].id);
+        const firstId = roadmapsData[0].id;
+        setSelectedRoadmapId(firstId);
         // expand first phase by default
         if (roadmapsData[0].phases && roadmapsData[0].phases.length > 0) {
           setExpandedPhases({ [roadmapsData[0].phases[0].id]: true });
         }
+        await fetchDashboard(firstId);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to initialize SkillPilot');
@@ -102,6 +119,12 @@ function DashboardContent() {
       fetchData();
     }
   }, [user?.id, user?.isOnboarded]);
+
+  useEffect(() => {
+    if (selectedRoadmapId) {
+      fetchDashboard(selectedRoadmapId);
+    }
+  }, [selectedRoadmapId]);
 
   if (authLoading) {
     return (
@@ -130,16 +153,15 @@ function DashboardContent() {
 
   // Flattened tasks
   const allTasks: Task[] = activeRoadmap?.phases.flatMap((p) => p.tasks) || [];
-  const completedTasks = allTasks.filter((t) => t.isCompleted);
   const pendingTasks = allTasks.filter((t) => !t.isCompleted);
-  const nextUpTask = pendingTasks[0] || null;
   const currentActionTask = allTasks.find((t) => t.status === 'current') || pendingTasks[0] || null;
 
   // Toggle task completion
   const handleToggleTask = async (task: Task) => {
     if (!activeRoadmap) return;
     try {
-      const result = await api.toggleTaskCompletion(activeRoadmap.id, task.id, !task.isCompleted);
+      const willComplete = !task.isCompleted;
+      const result = await api.toggleTaskCompletion(activeRoadmap.id, task.id, willComplete);
       
       // Update local state smoothly
       setRoadmaps((prev) =>
@@ -149,8 +171,84 @@ function DashboardContent() {
       if (focusedTask && focusedTask.id === task.id) {
         setFocusedTask(result.task);
       }
+
+      if (willComplete) {
+        fireCelebrationConfetti();
+      }
+
+      await fetchDashboard(activeRoadmap.id);
     } catch (err: any) {
       alert(`Could not update task: ${err.message}`);
+    }
+  };
+
+  // Start or resume a lesson
+  const handleStartLesson = async (task: Task) => {
+    if (!activeRoadmap) return;
+    try {
+      if (task.status !== 'completed' && task.status !== 'in_progress') {
+        const res = await api.updateTaskStatus(activeRoadmap.id, task.id, 'in_progress');
+        setRoadmaps((prev) =>
+          prev.map((r) =>
+            r.id === activeRoadmap.id
+              ? {
+                  ...r,
+                  phases: r.phases.map((p) => ({
+                    ...p,
+                    tasks: p.tasks.map((t) => (t.id === task.id ? res.task : t)),
+                  })),
+                }
+              : r
+          )
+        );
+        setFocusedTask(res.task);
+      } else {
+        setFocusedTask(task);
+      }
+      fetchDashboard(activeRoadmap.id);
+    } catch (err: any) {
+      console.error('Failed to start lesson:', err);
+      setFocusedTask(task);
+    }
+  };
+
+  // Reschedule a task to a different day
+  const handleRescheduleTask = async (task: Task, newDayNumber: number) => {
+    if (!activeRoadmap) return;
+    try {
+      const res = await api.rescheduleTask(activeRoadmap.id, task.id, newDayNumber);
+      setRoadmaps((prev) =>
+        prev.map((r) => (r.id === activeRoadmap.id ? res.roadmap : r))
+      );
+      if (focusedTask && focusedTask.id === task.id) {
+        setFocusedTask(res.task);
+      }
+      await fetchDashboard(activeRoadmap.id);
+    } catch (err: any) {
+      alert(`Could not reschedule task: ${err.message}`);
+    }
+  };
+
+  // Record a focused study session
+  const handleRecordSession = async (task: Task, minutes: number) => {
+    if (!activeRoadmap) return;
+    try {
+      await api.recordStudySession(activeRoadmap.id, task.id, minutes);
+      await fetchDashboard(activeRoadmap.id);
+    } catch (err: any) {
+      console.error('Failed to record study session:', err);
+    }
+  };
+
+  // Navigate to next lesson step
+  const handleNextStep = () => {
+    if (dashboardData?.upcomingTasks && dashboardData.upcomingTasks.length > 0) {
+      setFocusedTask(dashboardData.upcomingTasks[0]);
+    } else {
+      const nextPending = allTasks.find((t) => !t.isCompleted && (!focusedTask || t.id !== focusedTask.id));
+      if (nextPending) {
+        setFocusedTask(nextPending);
+      }
     }
   };
 
@@ -164,6 +262,7 @@ function DashboardContent() {
       setIsGeneratorOpen(false);
       fireCelebrationConfetti();
       setActiveTab('daily');
+      await fetchDashboard(newRoadmap.id);
     } catch (err: any) {
       alert(`Roadmap generation failed: ${err.message}`);
     } finally {
@@ -180,6 +279,7 @@ function DashboardContent() {
       setRoadmaps((prev) => prev.map((r) => (r.id === activeRoadmap.id ? updated : r)));
       setIsEditGoalOpen(false);
       fireCelebrationConfetti();
+      await fetchDashboard(activeRoadmap.id);
     } catch (err: any) {
       alert(`Failed to regenerate roadmap: ${err.message}`);
     } finally {
@@ -196,6 +296,7 @@ function DashboardContent() {
       setRoadmaps((prev) => prev.map((r) => (r.id === activeRoadmap.id ? updated : r)));
       setIsPaceModalOpen(false);
       fireCelebrationConfetti();
+      await fetchDashboard(activeRoadmap.id);
     } catch (err: any) {
       alert(`Pace recovery failed: ${err.message}`);
     } finally {
@@ -251,71 +352,35 @@ function DashboardContent() {
           <EmptyState onAction={() => setIsGeneratorOpen(true)} />
         ) : (
           <>
-            {/* Header / Roadmap Switcher Strip */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800/80">
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="indigo" size="sm" dot>
-                    Active Roadmap
-                  </Badge>
-                  <span className="text-xs text-slate-400 capitalize">
-                    {activeRoadmap.experienceLevel} Level • {activeRoadmap.hoursPerDay} hrs/day • {activeRoadmap.targetWeeks} Weeks
-                  </span>
-                </div>
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight mt-1">
-                  {activeRoadmap.title}
-                </h1>
-                <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-                  Target Goal: <span className="text-slate-200">{activeRoadmap.targetGoal}</span>
-                </p>
-              </div>
+            {/* Header / Personalized Student Experience */}
+            {dashboardData ? (
+              <PersonalizedHeader
+                roadmap={activeRoadmap}
+                dashboard={dashboardData}
+                onEditGoal={() => setIsEditGoalOpen(true)}
+                onPaceRecovery={() => setIsPaceModalOpen(true)}
+              />
+            ) : (
+              <Skeleton className="h-44 w-full rounded-2xl" />
+            )}
 
-              {/* Progress and Roadmap Selector */}
-              <div className="flex items-center gap-3">
-                {roadmaps.length > 1 && (
-                  <select
-                    value={selectedRoadmapId}
-                    onChange={(e) => setSelectedRoadmapId(e.target.value)}
-                    className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none"
-                  >
-                    {roadmaps.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.title}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsEditGoalOpen(true)}
-                  leftIcon={<RefreshCw className="w-3.5 h-3.5 text-violet-400" />}
+            {/* Roadmap Switcher if multiple roadmaps */}
+            {roadmaps.length > 1 && (
+              <div className="flex items-center justify-end gap-2 text-xs text-slate-400">
+                <span>Select Roadmap:</span>
+                <select
+                  value={selectedRoadmapId}
+                  onChange={(e) => setSelectedRoadmapId(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none"
                 >
-                  Edit Goal
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsPaceModalOpen(true)}
-                  leftIcon={<Sliders className="w-3.5 h-3.5 text-indigo-400" />}
-                >
-                  Pace Recovery
-                </Button>
+                  {roadmaps.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.title}
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
-
-            {/* Overall Progress Bar */}
-            <div className="p-4 rounded-2xl glass-card border border-slate-800 bg-slate-900/40 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold text-slate-200">Roadmap Progress</span>
-                <span className="font-bold text-indigo-300">
-                  {completedTasks.length} of {allTasks.length} Tasks Completed ({activeRoadmap.progressPercentage}%)
-                </span>
-              </div>
-              <Progress value={activeRoadmap.progressPercentage} size="md" variant="indigo" showPercentage={false} />
-            </div>
+            )}
 
             {/* Navigation Tabs */}
             <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
@@ -371,7 +436,7 @@ function DashboardContent() {
             {/* TAB 1: DAILY FOCUS MODE */}
             {activeTab === 'daily' && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left 2 Cols: Today's Spotlight & Next Up */}
+                {/* Left 2 Cols: Continue Learning & Today's Plan */}
                 <div className="lg:col-span-2 space-y-6">
                   {/* Anti-Abandonment Schedule Rebalance Suggestion Banner */}
                   <Alert
@@ -391,154 +456,50 @@ function DashboardContent() {
                     If life interrupts your streak, use Smart Pace Recovery to redistribute tasks smoothly with zero guilt or burnout.
                   </Alert>
 
-                  {/* Today's Spotlight Task */}
-                  {nextUpTask ? (
-                    <Card glow="indigo" padding="lg" className="border-indigo-500/40 relative overflow-hidden">
-                      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                  {/* Continue Learning Action Card */}
+                  <ContinueLearningCard
+                    task={dashboardData?.continueLearningTask || currentActionTask}
+                    onStartLesson={handleStartLesson}
+                    onToggleComplete={handleToggleTask}
+                    onReschedule={handleRescheduleTask}
+                    onViewNextStep={handleNextStep}
+                    isLoading={isDashboardLoading}
+                  />
 
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <Badge variant="indigo" size="md">
-                          Today's Bite-Sized Mission
-                        </Badge>
-                        <div className="flex items-center gap-1.5 text-xs text-indigo-300 font-medium">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>~{nextUpTask.estimatedMinutes} Mins</span>
-                        </div>
-                      </div>
-
-                      <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
-                        {nextUpTask.title}
-                      </h3>
-                      <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-4">
-                        {nextUpTask.conceptSummary}
-                      </p>
-
-                      <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 mb-6 space-y-2">
-                        <div className="text-xs font-semibold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                          <Terminal className="w-3.5 h-3.5" />
-                          Hands-On Practical Goal
-                        </div>
-                        <p className="text-xs sm:text-sm text-slate-300">
-                          {nextUpTask.practicalExercise}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
-                        <span className="text-xs text-slate-400 font-medium">
-                          Day {nextUpTask.dayNumber} • {nextUpTask.phaseTitle}
-                        </span>
-
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="secondary"
-                            size="md"
-                            onClick={() => handleToggleTask(nextUpTask)}
-                            leftIcon={<Check className="w-4 h-4" />}
-                          >
-                            Mark Done
-                          </Button>
-                          <Button
-                            variant="accent"
-                            size="md"
-                            onClick={() => setFocusedTask(nextUpTask)}
-                            rightIcon={<ArrowRight className="w-4 h-4" />}
-                          >
-                            Enter Focus Mode
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ) : (
-                    <Card padding="lg" className="text-center py-12">
-                      <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-                      <h3 className="text-xl font-bold text-white mb-1">
-                        All Tasks Completed!
-                      </h3>
-                      <p className="text-sm text-slate-400 max-w-md mx-auto mb-4">
-                        Incredible dedication! You have finished every milestone in this roadmap. Ready for your next skill?
-                      </p>
-                      <Button
-                        variant="accent"
-                        size="md"
-                        onClick={() => setIsGeneratorOpen(true)}
-                        leftIcon={<Sparkles className="w-4 h-4" />}
-                      >
-                        Create a New Roadmap
-                      </Button>
-                    </Card>
-                  )}
-
-                  {/* Next Up Queue */}
-                  <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-indigo-400" />
-                      Upcoming Daily Tasks
-                    </h3>
-
-                    <div className="space-y-2.5">
-                      {pendingTasks.slice(1, 5).map((task) => (
-                        <div
-                          key={task.id}
-                          className="p-3.5 rounded-xl glass-card border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between gap-3"
-                        >
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => handleToggleTask(task)}
-                              className="w-5 h-5 rounded-lg border border-slate-700 hover:border-indigo-400 flex items-center justify-center text-transparent hover:text-indigo-400 transition-colors"
-                              aria-label="Complete task"
-                            >
-                              <Check className="w-3.5 h-3.5 stroke-[3]" />
-                            </button>
-                            <div>
-                              <h4 className="text-xs sm:text-sm font-semibold text-slate-200 hover:text-white cursor-pointer" onClick={() => setFocusedTask(task)}>
-                                {task.title}
-                              </h4>
-                              <p className="text-[11px] text-slate-400">
-                                Day {task.dayNumber} • {task.estimatedMinutes} mins • {task.phaseTitle}
-                              </p>
-                            </div>
-                          </div>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setFocusedTask(task)}
-                          >
-                            Details
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  {/* Today's Learning Plan */}
+                  <TodayLearningPlan
+                    dayNumber={dashboardData?.todayPlan.dayNumber || 1}
+                    tasks={dashboardData?.todayPlan.tasks || []}
+                    totalEstimatedMinutes={dashboardData?.todayPlan.totalEstimatedMinutes || 0}
+                    completedMinutes={dashboardData?.todayPlan.completedMinutes || 0}
+                    isDayCompleted={dashboardData?.todayPlan.isDayCompleted || false}
+                    onOpenTask={(t) => setFocusedTask(t)}
+                    onToggleComplete={handleToggleTask}
+                    onRescheduleTask={handleRescheduleTask}
+                    isLoading={isDashboardLoading}
+                  />
                 </div>
 
-                {/* Right 1 Col: Gamification, Streaks & Quick Gaps */}
+                {/* Right 1 Col: Weekly Activity Chart, Overdue/Upcoming Queue, and Diagnostics */}
                 <div className="space-y-6">
-                  {/* Streak & XP Card */}
-                  <Card padding="md" className="space-y-4">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                      Motivation & Momentum
-                    </h4>
+                  {/* 7-Day Velocity Chart */}
+                  <WeeklyActivityChart
+                    weeklyActivity={dashboardData?.weeklyActivity || []}
+                    totalHoursStudied={dashboardData?.totalHoursStudied || 0}
+                    dailyTargetHours={activeRoadmap.hoursPerDay || 1.5}
+                    streakDays={dashboardData?.currentStreak || 1}
+                  />
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-center">
-                        <Flame className="w-6 h-6 text-amber-400 mx-auto mb-1 fill-amber-400/20" />
-                        <div className="text-lg font-black text-white">{activeRoadmap.streakDays || 1} Days</div>
-                        <div className="text-[10px] text-slate-400 uppercase tracking-wider">Daily Streak</div>
-                      </div>
-
-                      <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-center">
-                        <Zap className="w-6 h-6 text-indigo-400 mx-auto mb-1 fill-indigo-400/20" />
-                        <div className="text-lg font-black text-white">{activeRoadmap.totalXp || 100} XP</div>
-                        <div className="text-[10px] text-slate-400 uppercase tracking-wider">Knowledge XP</div>
-                      </div>
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-200 flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
-                      <span>Consistent daily practice yields 4.2x higher retention than weekend cramming!</span>
-                    </div>
-                  </Card>
+                  {/* Tasks Queue: Overdue, Upcoming, Recently Completed */}
+                  <TasksQueueTabs
+                    overdueTasks={dashboardData?.overdueTasks || []}
+                    upcomingTasks={dashboardData?.upcomingTasks || []}
+                    recentlyCompletedTasks={dashboardData?.recentlyCompletedTasks || []}
+                    currentDayNumber={dashboardData?.todayPlan.dayNumber || 1}
+                    onOpenTask={(t) => setFocusedTask(t)}
+                    onRescheduleTask={handleRescheduleTask}
+                    isLoading={isDashboardLoading}
+                  />
 
                   {/* Priority Skill Gaps Snapshot */}
                   <Card padding="md" className="space-y-3">
@@ -1063,6 +1024,9 @@ function DashboardContent() {
         onClose={() => setFocusedTask(null)}
         task={focusedTask}
         onToggleComplete={handleToggleTask}
+        onStartSession={handleRecordSession}
+        onReschedule={handleRescheduleTask}
+        onNextStep={handleNextStep}
         isLoading={false}
       />
 

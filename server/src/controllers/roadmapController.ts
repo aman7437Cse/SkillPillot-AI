@@ -167,7 +167,7 @@ export async function deleteRoadmapHandler(req: Request, res: Response, next: Ne
 
 export async function toggleTaskCompletionHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const roadmapId = String(req.params.roadmapId);
+    const roadmapId = String(req.params.roadmapId || req.params.id);
     const taskId = String(req.params.taskId);
     const { isCompleted } = toggleTaskSchema.parse(req.body);
 
@@ -244,6 +244,103 @@ export async function submitQuizScoreHandler(req: Request, res: Response, next: 
       success: true,
       message: score >= 75 ? 'Skill gap mastered! Excellent work.' : 'Score recorded. Keep practicing!',
       data: updatedGap,
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ success: false, errors: err.errors });
+    }
+    next(err);
+  }
+}
+
+export async function getDashboardHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = String(req.params.id);
+    const userId = req.user?.id || (req.headers['x-user-id'] as string) || 'user-demo-alex';
+    const studentName = (req.headers['x-user-name'] as string) || req.user?.fullName;
+    const dashboard = await storage.getDashboardData(userId, id, studentName);
+    if (!dashboard) {
+      return res.status(404).json({ success: false, message: `Roadmap '${id}' not found` });
+    }
+    res.json({ success: true, data: dashboard });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const recordSessionSchema = z.object({
+  durationMinutes: z.number().min(1).max(360),
+  xpEarned: z.number().min(0).max(500).default(25),
+});
+
+export async function recordSessionHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const roadmapId = String(req.params.roadmapId || req.params.id);
+    const taskId = String(req.params.taskId);
+    const userId = req.user?.id || (req.headers['x-user-id'] as string) || 'user-demo-alex';
+    const { durationMinutes, xpEarned } = recordSessionSchema.parse(req.body);
+
+    const session = await storage.recordStudySession(userId, roadmapId, taskId, durationMinutes, xpEarned);
+    res.status(201).json({ success: true, message: 'Study session recorded', data: session });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ success: false, errors: err.errors });
+    }
+    next(err);
+  }
+}
+
+const taskStatusSchema = z.object({
+  status: z.enum(['not_started', 'in_progress', 'completed', 'overdue', 'locked', 'current']),
+});
+
+export async function updateTaskStatusHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const roadmapId = String(req.params.roadmapId || req.params.id);
+    const taskId = String(req.params.taskId);
+    const { status } = taskStatusSchema.parse(req.body);
+
+    const result = await storage.updateTaskExecutionStatus(roadmapId, taskId, status);
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'Roadmap or Task not found' });
+    }
+    res.json({
+      success: true,
+      message: `Task status updated to ${status}`,
+      data: {
+        task: result.updatedTask,
+        roadmap: result.roadmap,
+      },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ success: false, errors: err.errors });
+    }
+    next(err);
+  }
+}
+
+const rescheduleTaskSchema = z.object({
+  newDayNumber: z.number().min(1).max(365),
+});
+
+export async function rescheduleTaskHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const roadmapId = String(req.params.roadmapId || req.params.id);
+    const taskId = String(req.params.taskId);
+    const { newDayNumber } = rescheduleTaskSchema.parse(req.body);
+
+    const result = await storage.rescheduleTask(roadmapId, taskId, newDayNumber);
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'Roadmap or Task not found' });
+    }
+    res.json({
+      success: true,
+      message: `Task rescheduled to Day ${newDayNumber}`,
+      data: {
+        task: result.updatedTask,
+        roadmap: result.roadmap,
+      },
     });
   } catch (err) {
     if (err instanceof z.ZodError) {

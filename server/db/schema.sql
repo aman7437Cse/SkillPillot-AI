@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   resources JSONB DEFAULT '[]'::jsonb,
   status TEXT NOT NULL DEFAULT 'locked' CHECK (status IN ('completed', 'current', 'locked', 'upcoming')),
   is_completed BOOLEAN NOT NULL DEFAULT false,
+  started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
   order_index INTEGER NOT NULL DEFAULT 0,
   is_essential BOOLEAN NOT NULL DEFAULT true,
@@ -94,6 +95,10 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   is_milestone BOOLEAN NOT NULL DEFAULT false,
   is_final_project BOOLEAN NOT NULL DEFAULT false,
   prerequisite_task_ids JSONB DEFAULT '[]'::jsonb,
+  learning_objectives JSONB DEFAULT '[]'::jsonb,
+  completion_criteria JSONB DEFAULT '[]'::jsonb,
+  practice_questions JSONB DEFAULT '[]'::jsonb,
+  rescheduled_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -108,24 +113,42 @@ CREATE TABLE IF NOT EXISTS public.skill_gaps (
   last_evaluated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 8. Performance Indexes
+-- 8. Study Sessions Table (Daily Active Study Tracking & Focus Mode Logs)
+CREATE TABLE IF NOT EXISTS public.study_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  roadmap_id UUID NOT NULL REFERENCES public.roadmaps(id) ON DELETE CASCADE,
+  task_id UUID NOT NULL REFERENCES public.tasks(id) ON DELETE CASCADE,
+  duration_minutes INTEGER NOT NULL DEFAULT 0,
+  xp_earned INTEGER NOT NULL DEFAULT 0,
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 9. Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_learning_goals_user_id ON public.learning_goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON public.roadmaps(user_id);
 CREATE INDEX IF NOT EXISTS idx_phases_roadmap_id ON public.phases(roadmap_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_roadmap_id ON public.tasks(roadmap_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_phase_id ON public.tasks(phase_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON public.tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_day_number ON public.tasks(day_number);
 CREATE INDEX IF NOT EXISTS idx_skill_gaps_roadmap_id ON public.skill_gaps(roadmap_id);
+CREATE INDEX IF NOT EXISTS idx_study_sessions_user_id ON public.study_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_study_sessions_roadmap_id ON public.study_sessions(roadmap_id);
+CREATE INDEX IF NOT EXISTS idx_study_sessions_task_id ON public.study_sessions(task_id);
 
--- 9. Row Level Security (RLS)
+-- 10. Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.learning_goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roadmaps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.phases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.skill_gaps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.study_sessions ENABLE ROW LEVEL SECURITY;
 
--- 10. Granular RLS Policies Enforcing User Ownership
+-- 11. Granular RLS Policies Enforcing User Ownership
 CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 
@@ -144,3 +167,7 @@ CREATE POLICY "Users can view tasks of their roadmaps" ON public.tasks FOR SELEC
 CREATE POLICY "Users can update tasks of their roadmaps" ON public.tasks FOR UPDATE USING (
   EXISTS (SELECT 1 FROM public.roadmaps WHERE id = tasks.roadmap_id AND user_id = auth.uid())
 );
+
+CREATE POLICY "Users can view their own study sessions" ON public.study_sessions FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can record their study sessions" ON public.study_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
+

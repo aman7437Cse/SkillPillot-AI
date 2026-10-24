@@ -1,7 +1,12 @@
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
 export type PaceMode = 'relaxed' | 'balanced' | 'intensive';
 export type LearningStyle = 'hands_on' | 'visual' | 'reading' | 'video' | 'problem_solving';
-export type TaskStatus = 'completed' | 'current' | 'locked' | 'upcoming';
+export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'overdue' | 'locked' | 'current' | 'upcoming';
+
+export interface PracticeQuestion {
+  question: string;
+  answerHint?: string;
+}
 
 export interface TaskResource {
   title: string;
@@ -24,12 +29,17 @@ export interface Task {
   status: TaskStatus;
   isCompleted: boolean;
   completedAt?: string;
+  startedAt?: string;
   orderIndex: number;
   isEssential: boolean;
   isOverdue?: boolean;
   isMilestone?: boolean;
   isFinalProject?: boolean;
   prerequisiteTaskIds?: string[];
+  learningObjectives?: string[];
+  completionCriteria?: string[];
+  practiceQuestions?: PracticeQuestion[];
+  rescheduledCount?: number;
 }
 
 export interface RoadmapPhase {
@@ -107,4 +117,65 @@ export interface GenerateRoadmapInput {
 export interface PaceRecoveryInput {
   roadmapId: string;
   strategy: 'redistribute' | 'sprint' | 'core_essentials';
+}
+
+export interface StudySession {
+  id: string;
+  userId: string;
+  roadmapId: string;
+  taskId: string;
+  taskTitle: string;
+  durationMinutes: number;
+  startedAt: string;
+  completedAt?: string;
+  xpEarned: number;
+}
+
+export interface WeeklyDayActivity {
+  day: string;
+  date: string;
+  minutes: number;
+  isToday: boolean;
+}
+
+export interface StudentLevel {
+  levelNumber: number;
+  title: string;
+  currentXp: number;
+  nextLevelXp: number;
+  progressPercent: number;
+}
+
+export interface DashboardData {
+  greeting: string;
+  studentName: string;
+  avatarUrl?: string;
+  activeGoal: string;
+  skillCategory: string;
+  experienceLevel: ExperienceLevel;
+  overallProgress: number;
+  completedTasksCount: number;
+  totalTasksCount: number;
+  totalHoursStudied: number;
+  currentStreak: number;
+  totalXp: number;
+  level: StudentLevel;
+  continueLearningTask: Task | null;
+  todayPlan: {
+    dayNumber: number;
+    tasks: Task[];
+    totalEstimatedMinutes: number;
+    completedMinutes: number;
+    isDayCompleted: boolean;
+  };
+  weeklyActivity: WeeklyDayActivity[];
+  overdueTasks: Task[];
+  upcomingTasks: Task[];
+  recentlyCompletedTasks: Task[];
+  nextMilestone: {
+    title: string;
+    dayNumber: number;
+    phaseTitle: string;
+    tasksRemaining: number;
+  } | null;
 }
