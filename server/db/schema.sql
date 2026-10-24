@@ -1,5 +1,6 @@
 -- ====================================================================
--- SkillPilot AI — Supabase / PostgreSQL Production Schema
+-- SkillPilot AI — Supabase / PostgreSQL Production Schema (v2.0)
+-- Full Onboarding, AI Personalization, Task Dependencies & Capstones
 -- ====================================================================
 
 -- 1. Enable UUID Extension
@@ -9,19 +10,38 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
-  full_name TEXT,
+  full_name TEXT NOT NULL,
   avatar_url TEXT,
+  learning_persona TEXT DEFAULT 'student',
   streak_count INTEGER DEFAULT 0,
   xp_points INTEGER DEFAULT 0,
   level INTEGER DEFAULT 1,
+  has_completed_onboarding BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Roadmaps Table
+-- 3. Learning Goals Table
+CREATE TABLE IF NOT EXISTS public.learning_goals (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  skill_category TEXT NOT NULL,
+  goal_statement TEXT NOT NULL,
+  experience_level TEXT NOT NULL CHECK (experience_level IN ('beginner', 'intermediate', 'advanced')),
+  daily_hours NUMERIC(3,1) NOT NULL DEFAULT 1.5,
+  target_weeks INTEGER NOT NULL DEFAULT 6,
+  learning_style TEXT NOT NULL DEFAULT 'hands_on' CHECK (learning_style IN ('hands_on', 'visual', 'reading', 'video', 'problem_solving')),
+  existing_knowledge JSONB DEFAULT '[]'::jsonb,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Roadmaps Table
 CREATE TABLE IF NOT EXISTS public.roadmaps (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  goal_id UUID REFERENCES public.learning_goals(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   skill_category TEXT NOT NULL,
   target_goal TEXT NOT NULL,
@@ -29,15 +49,20 @@ CREATE TABLE IF NOT EXISTS public.roadmaps (
   hours_per_day NUMERIC(3,1) NOT NULL DEFAULT 1.5,
   target_weeks INTEGER NOT NULL DEFAULT 6,
   pace_mode TEXT NOT NULL DEFAULT 'balanced' CHECK (pace_mode IN ('relaxed', 'balanced', 'intensive')),
+  learning_style TEXT NOT NULL DEFAULT 'hands_on',
+  existing_knowledge JSONB DEFAULT '[]'::jsonb,
   progress_percentage INTEGER NOT NULL DEFAULT 0,
   streak_days INTEGER NOT NULL DEFAULT 0,
   total_xp INTEGER NOT NULL DEFAULT 0,
   is_active BOOLEAN NOT NULL DEFAULT true,
+  is_ai_generated BOOLEAN NOT NULL DEFAULT false,
+  generation_provider TEXT NOT NULL DEFAULT 'Deterministic Engine',
+  final_project JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. Phases Table
+-- 5. Phases Table
 CREATE TABLE IF NOT EXISTS public.phases (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   roadmap_id UUID NOT NULL REFERENCES public.roadmaps(id) ON DELETE CASCADE,
@@ -48,7 +73,7 @@ CREATE TABLE IF NOT EXISTS public.phases (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. Tasks Table
+-- 6. Tasks Table (with Dependency Statuses & Milestones)
 CREATE TABLE IF NOT EXISTS public.tasks (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   roadmap_id UUID NOT NULL REFERENCES public.roadmaps(id) ON DELETE CASCADE,
@@ -60,15 +85,19 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   practical_exercise TEXT NOT NULL,
   key_takeaways JSONB DEFAULT '[]'::jsonb,
   resources JSONB DEFAULT '[]'::jsonb,
+  status TEXT NOT NULL DEFAULT 'locked' CHECK (status IN ('completed', 'current', 'locked', 'upcoming')),
   is_completed BOOLEAN NOT NULL DEFAULT false,
   completed_at TIMESTAMPTZ,
   order_index INTEGER NOT NULL DEFAULT 0,
   is_essential BOOLEAN NOT NULL DEFAULT true,
   is_overdue BOOLEAN NOT NULL DEFAULT false,
+  is_milestone BOOLEAN NOT NULL DEFAULT false,
+  is_final_project BOOLEAN NOT NULL DEFAULT false,
+  prerequisite_task_ids JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. Skill Gaps Table
+-- 7. Skill Gaps Table
 CREATE TABLE IF NOT EXISTS public.skill_gaps (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   roadmap_id UUID NOT NULL REFERENCES public.roadmaps(id) ON DELETE CASCADE,
@@ -79,24 +108,39 @@ CREATE TABLE IF NOT EXISTS public.skill_gaps (
   last_evaluated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7. Performance Indexes
+-- 8. Performance Indexes
+CREATE INDEX IF NOT EXISTS idx_learning_goals_user_id ON public.learning_goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON public.roadmaps(user_id);
+CREATE INDEX IF NOT EXISTS idx_phases_roadmap_id ON public.phases(roadmap_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_roadmap_id ON public.tasks(roadmap_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_phase_id ON public.tasks(phase_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON public.tasks(status);
 CREATE INDEX IF NOT EXISTS idx_skill_gaps_roadmap_id ON public.skill_gaps(roadmap_id);
 
--- 8. Row Level Security (RLS)
+-- 9. Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.learning_goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roadmaps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.phases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.skill_gaps ENABLE ROW LEVEL SECURITY;
 
--- 9. Basic RLS Policies
+-- 10. Granular RLS Policies Enforcing User Ownership
 CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Users can view their own learning goals" ON public.learning_goals FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can create learning goals" ON public.learning_goals FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update learning goals" ON public.learning_goals FOR UPDATE USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can view their own roadmaps" ON public.roadmaps FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert their own roadmaps" ON public.roadmaps FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update their own roadmaps" ON public.roadmaps FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete their own roadmaps" ON public.roadmaps FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view tasks of their roadmaps" ON public.tasks FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.roadmaps WHERE id = tasks.roadmap_id AND user_id = auth.uid())
+);
+CREATE POLICY "Users can update tasks of their roadmaps" ON public.tasks FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.roadmaps WHERE id = tasks.roadmap_id AND user_id = auth.uid())
+);

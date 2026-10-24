@@ -11,25 +11,28 @@ const generateRoadmapSchema = z.object({
   hoursPerDay: z.number().min(0.5).max(12).default(1.5),
   targetWeeks: z.number().min(1).max(52).default(6),
   paceMode: z.enum(['relaxed', 'balanced', 'intensive']).default('balanced'),
-  learningPreferences: z.array(z.string()).optional()
+  learningStyle: z.enum(['hands_on', 'visual', 'reading', 'video', 'problem_solving']).default('hands_on'),
+  existingKnowledge: z.array(z.string()).optional(),
+  avatarUrl: z.string().optional(),
 });
 
 const toggleTaskSchema = z.object({
-  isCompleted: z.boolean()
+  isCompleted: z.boolean(),
 });
 
 const paceRecoverySchema = z.object({
-  strategy: z.enum(['redistribute', 'sprint', 'core_essentials'])
+  strategy: z.enum(['redistribute', 'sprint', 'core_essentials']),
 });
 
 const submitQuizSchema = z.object({
   gapId: z.string(),
-  score: z.number().min(0).max(100)
+  score: z.number().min(0).max(100),
 });
 
 export async function getRoadmapsHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const roadmaps = await storage.getAllRoadmaps();
+    const userId = req.user?.id;
+    const roadmaps = await storage.getAllRoadmaps(userId);
     res.json({ success: true, count: roadmaps.length, data: roadmaps });
   } catch (err) {
     next(err);
@@ -39,7 +42,8 @@ export async function getRoadmapsHandler(req: Request, res: Response, next: Next
 export async function getRoadmapByIdHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const id = String(req.params.id);
-    const roadmap = await storage.getRoadmapById(id);
+    const userId = req.user?.id;
+    const roadmap = await storage.getRoadmapById(id, userId);
     if (!roadmap) {
       return res.status(404).json({ success: false, message: `Roadmap with ID '${id}' not found` });
     }
@@ -53,13 +57,17 @@ export async function generateRoadmapHandler(req: Request, res: Response, next: 
   try {
     const validatedInput = generateRoadmapSchema.parse(req.body);
     const roadmapId = `roadmap-${Date.now()}`;
+    const userId = req.user?.id || (req.headers['x-user-id'] as string) || 'user-demo-alex';
 
-    // Call AI / Deterministic generator
-    const { phases, skillGaps } = await generateAiRoadmap(validatedInput, roadmapId);
+    // Call AI / Catalog generator
+    const { phases, skillGaps, finalProject, isAiGenerated, generationProvider } = await generateAiRoadmap(
+      validatedInput,
+      roadmapId
+    );
 
     const newRoadmap: Roadmap = {
       id: roadmapId,
-      userId: req.user?.id || (req.headers['x-user-id'] as string) || 'user-demo-1',
+      userId,
       title: `${validatedInput.skill} Mastery (${validatedInput.targetWeeks} Weeks)`,
       skillCategory: validatedInput.skill,
       targetGoal: validatedInput.targetGoal,
@@ -67,26 +75,92 @@ export async function generateRoadmapHandler(req: Request, res: Response, next: 
       hoursPerDay: validatedInput.hoursPerDay,
       targetWeeks: validatedInput.targetWeeks,
       paceMode: validatedInput.paceMode,
+      learningStyle: validatedInput.learningStyle,
+      existingKnowledge: validatedInput.existingKnowledge || [],
       progressPercentage: 0,
       streakDays: 1,
       totalXp: 100, // starter XP
       isActive: true,
       phases,
       skillGaps,
+      finalProject,
+      isAiGenerated,
+      generationProvider,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     const saved = await storage.saveRoadmap(newRoadmap);
     res.status(201).json({
       success: true,
       message: 'Roadmap generated successfully',
-      data: saved
+      data: saved,
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ success: false, errors: err.errors });
     }
+    next(err);
+  }
+}
+
+export async function regenerateRoadmapHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = String(req.params.id);
+    const userId = req.user?.id;
+    const existing = await storage.getRoadmapById(id, userId);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Roadmap not found' });
+    }
+
+    const validatedInput = generateRoadmapSchema.parse(req.body);
+
+    const { phases, skillGaps, finalProject, isAiGenerated, generationProvider } = await generateAiRoadmap(
+      validatedInput,
+      id
+    );
+
+    existing.title = `${validatedInput.skill} Mastery (${validatedInput.targetWeeks} Weeks)`;
+    existing.skillCategory = validatedInput.skill;
+    existing.targetGoal = validatedInput.targetGoal;
+    existing.experienceLevel = validatedInput.experienceLevel;
+    existing.hoursPerDay = validatedInput.hoursPerDay;
+    existing.targetWeeks = validatedInput.targetWeeks;
+    existing.paceMode = validatedInput.paceMode;
+    existing.learningStyle = validatedInput.learningStyle;
+    existing.existingKnowledge = validatedInput.existingKnowledge || [];
+    existing.phases = phases;
+    existing.skillGaps = skillGaps;
+    existing.finalProject = finalProject;
+    existing.isAiGenerated = isAiGenerated;
+    existing.generationProvider = generationProvider;
+    existing.progressPercentage = 0;
+    existing.updatedAt = new Date().toISOString();
+
+    const saved = await storage.saveRoadmap(existing);
+    res.json({
+      success: true,
+      message: 'Roadmap recalibrated and regenerated successfully',
+      data: saved,
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ success: false, errors: err.errors });
+    }
+    next(err);
+  }
+}
+
+export async function deleteRoadmapHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = String(req.params.id);
+    const userId = req.user?.id;
+    const deleted = await storage.deleteRoadmap(id, userId);
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: 'Roadmap not found' });
+    }
+    res.json({ success: true, message: 'Roadmap deleted successfully' });
+  } catch (err) {
     next(err);
   }
 }
@@ -107,8 +181,8 @@ export async function toggleTaskCompletionHandler(req: Request, res: Response, n
       message: isCompleted ? 'Task marked as completed! +50 XP' : 'Task marked as incomplete',
       data: {
         task: result.updatedTask,
-        roadmap: result.roadmap
-      }
+        roadmap: result.roadmap,
+      },
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -131,7 +205,7 @@ export async function recoverPaceHandler(req: Request, res: Response, next: Next
     res.json({
       success: true,
       message: `Schedule recalibrated successfully using the '${strategy}' strategy!`,
-      data: updatedRoadmap
+      data: updatedRoadmap,
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -169,7 +243,7 @@ export async function submitQuizScoreHandler(req: Request, res: Response, next: 
     res.json({
       success: true,
       message: score >= 75 ? 'Skill gap mastered! Excellent work.' : 'Score recorded. Keep practicing!',
-      data: updatedGap
+      data: updatedGap,
     });
   } catch (err) {
     if (err instanceof z.ZodError) {

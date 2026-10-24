@@ -1,7 +1,21 @@
-import { useState, useEffect } from 'react';
-import { Clock, Play, Pause, RotateCcw, CheckCircle2, BookOpen, Terminal, ExternalLink, Lightbulb } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  Clock,
+  Play,
+  Pause,
+  RotateCcw,
+  CheckCircle2,
+  BookOpen,
+  Terminal,
+  ExternalLink,
+  Lightbulb,
+  Lock,
+  Award,
+  Sparkles
+} from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { Badge } from '../ui/Badge';
 import { fireCelebrationConfetti } from '../../lib/confetti';
 import type { Task } from '../../types';
 
@@ -20,7 +34,6 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
   onToggleComplete,
   isLoading,
 }) => {
-  // Focus Pomodoro Timer (default 25 minutes)
   const initialSeconds = (task?.estimatedMinutes || 25) * 60;
   const [timeLeft, setTimeLeft] = useState(initialSeconds);
   const [isRunning, setIsRunning] = useState(false);
@@ -70,6 +83,48 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
       maxWidth="xl"
     >
       <div className="space-y-5 pt-1">
+        {/* Status & Milestone Tags */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {task.status === 'completed' && (
+            <Badge variant="emerald" size="sm" dot>
+              Completed
+            </Badge>
+          )}
+          {task.status === 'current' && (
+            <Badge variant="indigo" size="sm" dot>
+              Current Active Mission
+            </Badge>
+          )}
+          {task.status === 'locked' && (
+            <Badge variant="amber" size="sm">
+              <Lock className="w-3 h-3 mr-1 inline" />
+              Locked Prerequisite
+            </Badge>
+          )}
+          {task.isMilestone && (
+            <Badge variant="violet" size="sm">
+              <Award className="w-3 h-3 mr-1 inline" />
+              Phase Milestone
+            </Badge>
+          )}
+          {task.isFinalProject && (
+            <Badge variant="cyan" size="sm">
+              <Sparkles className="w-3 h-3 mr-1 inline" />
+              Capstone Project
+            </Badge>
+          )}
+        </div>
+
+        {/* Locked Prerequisite Warning */}
+        {task.status === 'locked' && !task.isCompleted && (
+          <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2.5">
+            <Lock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              This lesson has prerequisites from earlier days. We recommend finishing previous lessons first to prevent cognitive overload, but you can explore the notes below at your own pace.
+            </div>
+          </div>
+        )}
+
         {/* Anti-Overwhelm Focus Timer Strip */}
         <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-violet-950/30 to-slate-950 border border-indigo-500/20 flex flex-wrap items-center justify-between gap-3 shadow-glow-sm">
           <div className="flex items-center gap-3">
@@ -94,7 +149,7 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
               onClick={() => setIsRunning(!isRunning)}
               leftIcon={isRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
             >
-              {isRunning ? 'Pause' : 'Start Focus'}
+              {isRunning ? 'Pause' : 'Start Lesson Timer'}
             </Button>
             <Button
               type="button"
@@ -134,7 +189,7 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
           <textarea
             value={exerciseNotes}
             onChange={(e) => setExerciseNotes(e.target.value)}
-            placeholder="Jot down notes, code snippets, or key reflections from your practice..."
+            placeholder="Jot down code snippets, test assertions, or your completion reflections..."
             className="w-full h-20 p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
           />
         </div>
@@ -201,7 +256,7 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
               isLoading={isLoading}
               leftIcon={<CheckCircle2 className="w-4 h-4" />}
             >
-              {task.isCompleted ? 'Mark Incomplete' : 'Complete Daily Task (+50 XP)'}
+              {task.isCompleted ? 'Mark Incomplete' : 'Complete Lesson (+50 XP)'}
             </Button>
           </div>
         </div>

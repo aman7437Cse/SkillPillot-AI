@@ -64,6 +64,21 @@ export const api = {
     return res.data;
   },
 
+  async regenerateRoadmap(id: string, payload: GenerateRoadmapPayload): Promise<Roadmap> {
+    const res = await fetchJson<{ success: boolean; data: Roadmap }>(`${API_BASE}/roadmaps/${id}/regenerate`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+
+  async deleteRoadmap(id: string): Promise<boolean> {
+    const res = await fetchJson<{ success: boolean }>(`${API_BASE}/roadmaps/${id}`, {
+      method: 'DELETE',
+    });
+    return res.success;
+  },
+
   async toggleTaskCompletion(roadmapId: string, taskId: string, isCompleted: boolean): Promise<{ task: Task; roadmap: Roadmap }> {
     const res = await fetchJson<{ success: boolean; data: { task: Task; roadmap: Roadmap } }>(
       `${API_BASE}/roadmaps/${roadmapId}/tasks/${taskId}/toggle`,

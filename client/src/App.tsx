@@ -15,12 +15,17 @@ import {
   Terminal,
   ChevronDown,
   ChevronRight,
-  Server
+  Server,
+  Lock,
+  RefreshCw,
+  Trophy,
+  PlayCircle
 } from 'lucide-react';
 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthPage } from './components/auth/AuthPage';
 import { OnboardingWizard } from './components/auth/OnboardingWizard';
+import { EditGoalModal } from './components/features/EditGoalModal';
 import { api } from './lib/api';
 import { Navbar } from './components/layout/Navbar';
 import { Button } from './components/ui/Button';
@@ -55,6 +60,8 @@ function DashboardContent() {
   // Modals state
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isEditGoalOpen, setIsEditGoalOpen] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [isPaceModalOpen, setIsPaceModalOpen] = useState(false);
   const [isPaceRecovering, setIsPaceRecovering] = useState(false);
   const [focusedTask, setFocusedTask] = useState<Task | null>(null);
@@ -126,6 +133,7 @@ function DashboardContent() {
   const completedTasks = allTasks.filter((t) => t.isCompleted);
   const pendingTasks = allTasks.filter((t) => !t.isCompleted);
   const nextUpTask = pendingTasks[0] || null;
+  const currentActionTask = allTasks.find((t) => t.status === 'current') || pendingTasks[0] || null;
 
   // Toggle task completion
   const handleToggleTask = async (task: Task) => {
@@ -160,6 +168,22 @@ function DashboardContent() {
       alert(`Roadmap generation failed: ${err.message}`);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Edit Goal and Regenerate Roadmap
+  const handleRegenerateRoadmap = async (payload: GenerateRoadmapPayload) => {
+    if (!activeRoadmap) return;
+    setIsRegenerating(true);
+    try {
+      const updated = await api.regenerateRoadmap(activeRoadmap.id, payload);
+      setRoadmaps((prev) => prev.map((r) => (r.id === activeRoadmap.id ? updated : r)));
+      setIsEditGoalOpen(false);
+      fireCelebrationConfetti();
+    } catch (err: any) {
+      alert(`Failed to regenerate roadmap: ${err.message}`);
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -261,6 +285,15 @@ function DashboardContent() {
                     ))}
                   </select>
                 )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditGoalOpen(true)}
+                  leftIcon={<RefreshCw className="w-3.5 h-3.5 text-violet-400" />}
+                >
+                  Edit Goal
+                </Button>
 
                 <Button
                   variant="outline"
@@ -550,26 +583,76 @@ function DashboardContent() {
             {/* TAB 2: INTERACTIVE CURRICULUM ROADMAP */}
             {activeTab === 'roadmap' && (
               <div className="space-y-6">
-                {/* Roadmap Filters */}
-                <div className="flex items-center justify-between flex-wrap gap-3 p-3 rounded-xl glass-card border border-slate-800">
-                  <div className="flex items-center gap-1.5">
+                {/* Next Recommended Action Banner */}
+                {currentActionTask && (
+                  <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-indigo-950/70 via-slate-900 to-violet-950/60 border border-indigo-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-glow-sm">
+                    <div className="flex items-start gap-3.5">
+                      <div className="p-2.5 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 shrink-0 mt-0.5">
+                        <PlayCircle className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">
+                            Next Recommended Action
+                          </span>
+                          <Badge variant="indigo" size="sm">Day {currentActionTask.dayNumber}</Badge>
+                          <span className="text-xs text-slate-400 font-medium">{currentActionTask.phaseTitle}</span>
+                        </div>
+                        <h4 className="text-base sm:text-lg font-bold text-white mt-0.5">
+                          {currentActionTask.title}
+                        </h4>
+                        <p className="text-xs text-slate-300 mt-0.5 line-clamp-1 max-w-2xl">
+                          {currentActionTask.conceptSummary}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-2">
+                      <Button
+                        variant="accent"
+                        size="md"
+                        onClick={() => setFocusedTask(currentActionTask)}
+                        leftIcon={<PlayCircle className="w-4 h-4" />}
+                      >
+                        Start Lesson (~{currentActionTask.estimatedMinutes}m)
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Provenance Strip & Filters */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl glass-card border border-slate-800">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-950 border border-slate-800 text-xs">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                      <span className="text-slate-400">Curriculum Source:</span>
+                      <strong className="text-slate-200">{activeRoadmap.generationProvider || 'Curriculum Catalog'}</strong>
+                      {activeRoadmap.isAiGenerated && (
+                        <Badge variant="indigo" size="sm">Live AI</Badge>
+                      )}
+                    </div>
+
+                    {activeRoadmap.learningStyle && (
+                      <span className="px-2.5 py-1 rounded-full bg-slate-950 border border-slate-800 text-xs text-slate-300 capitalize">
+                        Style: {activeRoadmap.learningStyle.replace('_', ' ')}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     {(['all', 'pending', 'completed', 'essential'] as const).map((filter) => (
                       <button
                         key={filter}
                         onClick={() => setRoadmapFilter(filter)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-lg capitalize transition-colors ${
+                        className={`px-3 py-1 text-xs font-semibold rounded-lg capitalize transition-colors ${
                           roadmapFilter === filter
-                            ? 'bg-indigo-600 text-white'
+                            ? 'bg-indigo-600 text-white shadow-glow-sm'
                             : 'text-slate-400 hover:text-white hover:bg-slate-800'
                         }`}
                       >
                         {filter}
                       </button>
                     ))}
-                  </div>
-
-                  <div className="text-xs text-slate-400">
-                    Showing {activeRoadmap.phases.length} Phases • {allTasks.length} Total Milestones
                   </div>
                 </div>
 
@@ -604,7 +687,7 @@ function DashboardContent() {
                               {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                             </button>
                             <div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-400">
                                   Phase {pIdx + 1} ({phase.estimatedWeeks} wks)
                                 </span>
@@ -645,17 +728,24 @@ function DashboardContent() {
                                 <div
                                   key={task.id}
                                   className={`p-3.5 rounded-xl border transition-all flex items-start sm:items-center justify-between gap-3 ${
-                                    task.isCompleted
+                                    task.status === 'completed'
                                       ? 'bg-slate-950/40 border-slate-800/60 opacity-80'
+                                      : task.status === 'current'
+                                      ? 'bg-indigo-950/30 border-indigo-500/40 shadow-glow-sm'
+                                      : task.status === 'locked'
+                                      ? 'bg-slate-950/60 border-slate-800/80 opacity-70'
                                       : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
                                   }`}
                                 >
                                   <div className="flex items-start sm:items-center gap-3">
+                                    {/* Completion Checkbox */}
                                     <button
                                       onClick={() => handleToggleTask(task)}
                                       className={`w-5 h-5 rounded-lg border mt-0.5 sm:mt-0 flex items-center justify-center transition-colors shrink-0 ${
                                         task.isCompleted
                                           ? 'border-emerald-500 bg-emerald-500 text-white'
+                                          : task.status === 'current'
+                                          ? 'border-indigo-400 text-transparent hover:text-indigo-400'
                                           : 'border-slate-700 hover:border-indigo-400 text-transparent'
                                       }`}
                                       aria-label={task.isCompleted ? 'Mark incomplete' : 'Mark completed'}
@@ -668,6 +758,7 @@ function DashboardContent() {
                                         <span className="text-[11px] font-semibold text-slate-400">
                                           Day {task.dayNumber}
                                         </span>
+
                                         <h4
                                           onClick={() => setFocusedTask(task)}
                                           className={`text-xs sm:text-sm font-semibold cursor-pointer hover:text-indigo-300 transition-colors ${
@@ -676,12 +767,30 @@ function DashboardContent() {
                                         >
                                           {task.title}
                                         </h4>
-                                        {!task.isEssential && (
-                                          <Badge variant="slate" size="sm">
-                                            Elective Deep Dive
+
+                                        {/* Status Badge */}
+                                        {task.status === 'completed' && (
+                                          <Badge variant="emerald" size="sm">✓ Done</Badge>
+                                        )}
+                                        {task.status === 'current' && (
+                                          <Badge variant="indigo" size="sm" dot>Current</Badge>
+                                        )}
+                                        {task.status === 'locked' && (
+                                          <Badge variant="amber" size="sm">
+                                            <Lock className="w-2.5 h-2.5 mr-1 inline" />
+                                            Locked
                                           </Badge>
                                         )}
+
+                                        {/* Milestone & Capstone Badges */}
+                                        {task.isMilestone && (
+                                          <Badge variant="violet" size="sm">🌟 Milestone</Badge>
+                                        )}
+                                        {task.isFinalProject && (
+                                          <Badge variant="cyan" size="sm">🏆 Capstone</Badge>
+                                        )}
                                       </div>
+
                                       <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
                                         {task.conceptSummary}
                                       </p>
@@ -693,11 +802,25 @@ function DashboardContent() {
                                       ~{task.estimatedMinutes}m
                                     </span>
                                     <Button
-                                      variant="ghost"
+                                      variant={
+                                        task.status === 'current'
+                                          ? 'accent'
+                                          : task.status === 'completed'
+                                          ? 'secondary'
+                                          : task.status === 'locked'
+                                          ? 'outline'
+                                          : 'ghost'
+                                      }
                                       size="sm"
                                       onClick={() => setFocusedTask(task)}
                                     >
-                                      Focus
+                                      {task.status === 'current'
+                                        ? 'Start Lesson'
+                                        : task.status === 'completed'
+                                        ? 'Review'
+                                        : task.status === 'locked'
+                                        ? 'Preview'
+                                        : 'Details'}
                                     </Button>
                                   </div>
                                 </div>
@@ -709,6 +832,64 @@ function DashboardContent() {
                     );
                   })}
                 </div>
+
+                {/* Final Capstone Project Card */}
+                {activeRoadmap.finalProject && (
+                  <Card padding="lg" glow="violet" className="border-violet-500/30 space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-400 shrink-0">
+                          <Trophy className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-violet-400">
+                              Curriculum Capstone Portfolio Project
+                            </span>
+                            <Badge variant="violet" size="sm">Final Milestone</Badge>
+                          </div>
+                          <h3 className="text-base sm:text-lg font-bold text-white mt-0.5">
+                            {activeRoadmap.finalProject.title}
+                          </h3>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      {activeRoadmap.finalProject.description}
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                      <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                        <h5 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                          Project Deliverables
+                        </h5>
+                        <ul className="space-y-1.5 text-xs text-slate-400">
+                          {activeRoadmap.finalProject.deliverables.map((item, idx) => (
+                            <li key={idx} className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                        <h5 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                          Evaluation Rubric
+                        </h5>
+                        <ul className="space-y-1.5 text-xs text-slate-400">
+                          {activeRoadmap.finalProject.rubric.map((item, idx) => (
+                            <li key={idx} className="flex items-center gap-2">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </Card>
+                )}
               </div>
             )}
 
@@ -884,6 +1065,16 @@ function DashboardContent() {
         onToggleComplete={handleToggleTask}
         isLoading={false}
       />
+
+      {activeRoadmap && (
+        <EditGoalModal
+          isOpen={isEditGoalOpen}
+          onClose={() => setIsEditGoalOpen(false)}
+          roadmap={activeRoadmap}
+          onRegenerate={handleRegenerateRoadmap}
+          isLoading={isRegenerating}
+        />
+      )}
     </div>
   );
 }

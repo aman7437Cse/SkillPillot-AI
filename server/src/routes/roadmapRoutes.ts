@@ -3,6 +3,8 @@ import {
   getRoadmapsHandler,
   getRoadmapByIdHandler,
   generateRoadmapHandler,
+  regenerateRoadmapHandler,
+  deleteRoadmapHandler,
   toggleTaskCompletionHandler,
   recoverPaceHandler,
   getTopicQuizHandler,
@@ -15,6 +17,8 @@ const router = Router();
 router.get('/', getRoadmapsHandler);
 router.post('/generate', generateRoadmapHandler);
 router.get('/:id', getRoadmapByIdHandler);
+router.put('/:id/regenerate', regenerateRoadmapHandler);
+router.delete('/:id', deleteRoadmapHandler);
 
 // Task status updates
 router.patch('/:roadmapId/tasks/:taskId/toggle', toggleTaskCompletionHandler);

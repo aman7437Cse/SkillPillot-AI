@@ -1,5 +1,7 @@
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
 export type PaceMode = 'relaxed' | 'balanced' | 'intensive';
+export type LearningStyle = 'hands_on' | 'visual' | 'reading' | 'video' | 'problem_solving';
+export type TaskStatus = 'completed' | 'current' | 'locked' | 'upcoming';
 
 export interface TaskResource {
   title: string;
@@ -19,11 +21,15 @@ export interface Task {
   practicalExercise: string;
   keyTakeaways: string[];
   resources: TaskResource[];
+  status: TaskStatus;
   isCompleted: boolean;
   completedAt?: string;
   orderIndex: number;
   isEssential: boolean;
   isOverdue?: boolean;
+  isMilestone?: boolean;
+  isFinalProject?: boolean;
+  prerequisiteTaskIds?: string[];
 }
 
 export interface RoadmapPhase {
@@ -32,6 +38,7 @@ export interface RoadmapPhase {
   description: string;
   estimatedWeeks: number;
   tasks: Task[];
+  orderIndex: number;
 }
 
 export interface SkillGap {
@@ -53,6 +60,13 @@ export interface QuizQuestion {
   explanation: string;
 }
 
+export interface FinalProject {
+  title: string;
+  description: string;
+  deliverables: string[];
+  rubric: string[];
+}
+
 export interface Roadmap {
   id: string;
   userId: string;
@@ -63,9 +77,14 @@ export interface Roadmap {
   hoursPerDay: number;
   targetWeeks: number;
   paceMode: PaceMode;
+  learningStyle: LearningStyle;
+  existingKnowledge: string[];
   progressPercentage: number;
   phases: RoadmapPhase[];
   skillGaps: SkillGap[];
+  finalProject?: FinalProject;
+  isAiGenerated: boolean;
+  generationProvider: string;
   streakDays: number;
   totalXp: number;
   isActive: boolean;
@@ -80,7 +99,9 @@ export interface GenerateRoadmapInput {
   hoursPerDay: number;
   targetWeeks: number;
   paceMode?: PaceMode;
-  learningPreferences?: string[];
+  learningStyle?: LearningStyle;
+  existingKnowledge?: string[];
+  avatarUrl?: string;
 }
 
 export interface PaceRecoveryInput {

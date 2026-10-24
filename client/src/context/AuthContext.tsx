@@ -15,6 +15,8 @@ export interface OnboardingData {
   role: string;
   primarySkill: string;
   hoursPerDay: number;
+  fullName?: string;
+  avatarUrl?: string;
 }
 
 interface AuthContextType {
@@ -326,13 +328,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Complete Onboarding
-  const completeOnboarding = async (_data: OnboardingData) => {
+  const completeOnboarding = async (data: OnboardingData) => {
     if (!user) return;
 
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.auth.updateUser({
-          data: { has_completed_onboarding: true },
+          data: {
+            has_completed_onboarding: true,
+            full_name: data.fullName || user.fullName,
+            avatar_url: data.avatarUrl || user.avatarUrl,
+          },
         });
       } catch (err) {
         console.warn('Could not update onboarding flag in Supabase:', err);
@@ -340,7 +346,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     localStorage.setItem(LOCAL_STORAGE_ONBOARDED_PREFIX + user.id, 'true');
-    setUser((prev) => (prev ? { ...prev, isOnboarded: true } : null));
+    const updatedUser: AuthUser = {
+      ...user,
+      fullName: data.fullName || user.fullName,
+      avatarUrl: data.avatarUrl || user.avatarUrl,
+      isOnboarded: true,
+    };
+    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify(updatedUser));
+
+    // Also update registered mock users list if present
+    try {
+      const rawUsers = localStorage.getItem(LOCAL_STORAGE_USERS_KEY);
+      if (rawUsers) {
+        const usersList: any[] = JSON.parse(rawUsers);
+        const idx = usersList.findIndex((u) => u.id === user.id);
+        if (idx !== -1) {
+          usersList[idx].fullName = updatedUser.fullName;
+          usersList[idx].avatarUrl = updatedUser.avatarUrl;
+          usersList[idx].isOnboarded = true;
+          localStorage.setItem(LOCAL_STORAGE_USERS_KEY, JSON.stringify(usersList));
+        }
+      }
+    } catch {
+      // Ignore error
+    }
+
+    setUser(updatedUser);
   };
 
   // Quick Demo Login for instant 1-click evaluation
