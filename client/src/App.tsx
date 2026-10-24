@@ -41,6 +41,7 @@ import { ContinueLearningCard } from './components/dashboard/ContinueLearningCar
 import { TodayLearningPlan } from './components/dashboard/TodayLearningPlan';
 import { WeeklyActivityChart } from './components/dashboard/WeeklyActivityChart';
 import { TasksQueueTabs } from './components/dashboard/TasksQueueTabs';
+import { AssistantView } from './components/assistant/AssistantView';
 
 import type { Roadmap, Task, SkillGap, GenerateRoadmapPayload, HealthStatus, DashboardData } from './types';
 
@@ -48,7 +49,8 @@ function DashboardContent() {
   const { user, isLoading: authLoading } = useAuth();
 
   // Navigation & View state
-  const [activeTab, setActiveTab] = useState<'daily' | 'roadmap' | 'gaps' | 'system'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'roadmap' | 'gaps' | 'assistant' | 'system'>('daily');
+  const [assistantInitialPrompt, setAssistantInitialPrompt] = useState<string | null>(null);
   
   // Data state
   const [roadmaps, setRoadmaps] = useState<Roadmap[]>([]);
@@ -326,12 +328,19 @@ function DashboardContent() {
     }));
   };
 
+  const handleAskAiAboutTask = (task: Task) => {
+    const prompt = `Can you explain the concept of "${task.title}" in beginner-friendly terms, provide a practical code example, and give me a step-by-step walkthrough of: "${task.conceptSummary}"?`;
+    setAssistantInitialPrompt(prompt);
+    setActiveTab('assistant');
+  };
+
   return (
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col font-sans">
       {/* Top Navigation */}
       <Navbar
         activeRoadmap={activeRoadmap}
         onOpenGenerator={() => setIsGeneratorOpen(true)}
+        onOpenAssistant={() => setActiveTab('assistant')}
         isBackendHealthy={Boolean(health && health.status === 'healthy')}
       />
 
@@ -421,6 +430,18 @@ function DashboardContent() {
               </button>
 
               <button
+                onClick={() => setActiveTab('assistant')}
+                className={`px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
+                  activeTab === 'assistant'
+                    ? 'bg-indigo-600 text-white shadow-glow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-indigo-400" />
+                AI Assistant & Tutor
+              </button>
+
+              <button
                 onClick={() => setActiveTab('system')}
                 className={`px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
                   activeTab === 'system'
@@ -463,6 +484,7 @@ function DashboardContent() {
                     onToggleComplete={handleToggleTask}
                     onReschedule={handleRescheduleTask}
                     onViewNextStep={handleNextStep}
+                    onAskAi={handleAskAiAboutTask}
                     isLoading={isDashboardLoading}
                   />
 
@@ -924,6 +946,18 @@ function DashboardContent() {
               </div>
             )}
 
+            {/* TAB: AI ASSISTANT & TUTOR */}
+            {activeTab === 'assistant' && (
+              <div className="space-y-4">
+                <AssistantView
+                  activeRoadmap={activeRoadmap}
+                  currentTask={currentActionTask}
+                  initialPrompt={assistantInitialPrompt}
+                  onClearInitialPrompt={() => setAssistantInitialPrompt(null)}
+                />
+              </div>
+            )}
+
             {/* TAB 4: SYSTEM & PLATFORM STATUS */}
             {activeTab === 'system' && (
               <div className="space-y-6">
@@ -1027,6 +1061,7 @@ function DashboardContent() {
         onStartSession={handleRecordSession}
         onReschedule={handleRescheduleTask}
         onNextStep={handleNextStep}
+        onAskAi={handleAskAiAboutTask}
         isLoading={false}
       />
 

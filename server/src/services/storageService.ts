@@ -10,6 +10,10 @@ import type {
   DashboardData,
   StudentLevel,
   WeeklyDayActivity,
+  Conversation,
+  ChatMessage,
+  ConversationWithMessages,
+  MessageRole,
 } from '../types/index.js';
 
 function calculateLevel(xp: number): StudentLevel {
@@ -59,9 +63,12 @@ if (config.hasSupabase) {
 class LocalDataStore {
   private roadmaps: Map<string, Roadmap> = new Map();
   private studySessions: Map<string, StudySession[]> = new Map();
+  private conversations: Map<string, Conversation> = new Map();
+  private messages: Map<string, ChatMessage[]> = new Map();
 
   constructor() {
     this.seedDefaultRoadmap();
+    this.seedDefaultConversations();
   }
 
   private seedDefaultRoadmap() {
@@ -811,6 +818,207 @@ class LocalDataStore {
     roadmap.updatedAt = new Date().toISOString();
 
     return gap;
+  }
+
+  /**
+   * Seed a realistic default AI conversation for immediate demonstration
+   */
+  private seedDefaultConversations() {
+    const demoConvId = 'conv-demo-react';
+    const demoConv: Conversation = {
+      id: demoConvId,
+      userId: 'user-demo-alex',
+      title: 'React Compound Component Architecture',
+      roadmapId: 'roadmap-demo-fullstack',
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      updatedAt: new Date(Date.now() - 7200000).toISOString(),
+    };
+    this.conversations.set(demoConvId, demoConv);
+
+    const demoMessages: ChatMessage[] = [
+      {
+        id: 'msg-demo-1',
+        conversationId: demoConvId,
+        role: 'user',
+        content: 'How do compound components in React improve code reusability compared to passing dozens of props into a monolithic component?',
+        createdAt: new Date(Date.now() - 86400000).toISOString(),
+      },
+      {
+        id: 'msg-demo-2',
+        conversationId: demoConvId,
+        role: 'assistant',
+        content: `Great question! The **Compound Component Pattern** is inspired by native HTML elements like \`<select>\` and \`<option>\`, where parent and child elements work together implicitly without cluttering props.
+
+### 1. The Monolithic Problem (Prop Explosion)
+In a traditional monolithic component, you end up passing dozens of boolean flags and callback props:
+\`\`\`tsx
+// Hard to customize layout, rigid ordering
+<Dropdown 
+  items={menuItems} 
+  showIcons={true} 
+  align="right" 
+  renderFooter={() => <CustomFooter />} 
+/>
+\`\`\`
+
+### 2. The Compound Component Solution
+By leveraging React Context, parent and children share internal state cleanly:
+\`\`\`tsx
+export function TabsDemo() {
+  return (
+    <Tabs defaultValue="overview">
+      <Tabs.List>
+        <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
+        <Tabs.Trigger value="curriculum">Curriculum</Tabs.Trigger>
+      </Tabs.List>
+      <Tabs.Content value="overview">Welcome to SkillPilot AI!</Tabs.Content>
+      <Tabs.Content value="curriculum">Day 1: TypeScript Generics...</Tabs.Content>
+    </Tabs>
+  );
+}
+\`\`\`
+
+### Key Takeaways:
+- **Inversion of Control**: The consumer controls the exact DOM hierarchy, styling, and slot placement.
+- **Single Responsibility**: Each subcomponent handles its own rendering without massive condition checks.
+- **Zero Prop-Drilling**: Context bridges internal state (active tab, open/close status) across sub-components.`,
+        provider: 'Google Gemini 2.5 Live',
+        isAiGenerated: true,
+        createdAt: new Date(Date.now() - 86350000).toISOString(),
+      },
+    ];
+    this.messages.set(demoConvId, demoMessages);
+  }
+
+  public async listConversations(userId: string): Promise<Conversation[]> {
+    const results: Conversation[] = [];
+    const isAlexOrDemo = userId === 'user-demo-alex' || userId === 'user-demo-1' || userId === 'usr-demo-alex';
+
+    for (const conv of this.conversations.values()) {
+      if (conv.userId === userId || (isAlexOrDemo && (conv.userId === 'user-demo-alex' || conv.userId === 'user-demo-1'))) {
+        const msgs = this.messages.get(conv.id) || [];
+        const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+        results.push({
+          ...conv,
+          messagesCount: msgs.length,
+          lastMessageSnippet: lastMsg
+            ? lastMsg.content.slice(0, 80) + (lastMsg.content.length > 80 ? '...' : '')
+            : 'No messages yet',
+        });
+      }
+    }
+
+    return results.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }
+
+  public async getConversation(conversationId: string, userId: string): Promise<ConversationWithMessages | null> {
+    const conv = this.conversations.get(conversationId);
+    if (!conv) return null;
+
+    const isAlexOrDemo = userId === 'user-demo-alex' || userId === 'user-demo-1' || userId === 'usr-demo-alex';
+    if (conv.userId !== userId && !(isAlexOrDemo && (conv.userId === 'user-demo-alex' || conv.userId === 'user-demo-1'))) {
+      return null;
+    }
+
+    const messages = this.messages.get(conversationId) || [];
+    return {
+      ...conv,
+      messages,
+      messagesCount: messages.length,
+    };
+  }
+
+  public async createConversation(userId: string, title?: string, roadmapId?: string): Promise<ConversationWithMessages> {
+    const id = `conv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+    const conv: Conversation = {
+      id,
+      userId,
+      title: title?.trim() || 'New Chat',
+      roadmapId,
+      createdAt: now,
+      updatedAt: now,
+      messagesCount: 0,
+    };
+
+    this.conversations.set(id, conv);
+    this.messages.set(id, []);
+
+    return {
+      ...conv,
+      messages: [],
+    };
+  }
+
+  public async updateConversationTitle(conversationId: string, userId: string, title: string): Promise<Conversation | null> {
+    const conv = this.conversations.get(conversationId);
+    if (!conv) return null;
+
+    const isAlexOrDemo = userId === 'user-demo-alex' || userId === 'user-demo-1' || userId === 'usr-demo-alex';
+    if (conv.userId !== userId && !(isAlexOrDemo && (conv.userId === 'user-demo-alex' || conv.userId === 'user-demo-1'))) {
+      return null;
+    }
+
+    conv.title = title.trim();
+    conv.updatedAt = new Date().toISOString();
+    return conv;
+  }
+
+  public async deleteConversation(conversationId: string, userId: string): Promise<boolean> {
+    const conv = this.conversations.get(conversationId);
+    if (!conv) return false;
+
+    const isAlexOrDemo = userId === 'user-demo-alex' || userId === 'user-demo-1' || userId === 'usr-demo-alex';
+    if (conv.userId !== userId && !(isAlexOrDemo && (conv.userId === 'user-demo-alex' || conv.userId === 'user-demo-1'))) {
+      return false;
+    }
+
+    this.conversations.delete(conversationId);
+    this.messages.delete(conversationId);
+    return true;
+  }
+
+  public async addMessage(
+    conversationId: string,
+    userId: string,
+    role: MessageRole,
+    content: string,
+    provider = 'Google Gemini 2.5 Live',
+    isAiGenerated = true
+  ): Promise<ChatMessage | null> {
+    const conv = this.conversations.get(conversationId);
+    if (!conv) return null;
+
+    const isAlexOrDemo = userId === 'user-demo-alex' || userId === 'user-demo-1' || userId === 'usr-demo-alex';
+    if (conv.userId !== userId && !(isAlexOrDemo && (conv.userId === 'user-demo-alex' || conv.userId === 'user-demo-1'))) {
+      return null;
+    }
+
+    const messages = this.messages.get(conversationId) || [];
+    const id = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+
+    const newMsg: ChatMessage = {
+      id,
+      conversationId,
+      role,
+      content,
+      provider,
+      isAiGenerated,
+      createdAt: now,
+    };
+
+    messages.push(newMsg);
+    this.messages.set(conversationId, messages);
+
+    // Auto-update conversation title if it is still default and this is first user message
+    if (role === 'user' && (conv.title === 'New Chat' || conv.title === 'New Conversation')) {
+      const cleanPrompt = content.replace(/\n+/g, ' ').trim();
+      conv.title = cleanPrompt.length > 36 ? cleanPrompt.slice(0, 36) + '...' : cleanPrompt;
+    }
+
+    conv.updatedAt = now;
+    return newMsg;
   }
 }
 

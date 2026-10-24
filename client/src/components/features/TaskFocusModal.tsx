@@ -29,6 +29,7 @@ export interface TaskFocusModalProps {
   onStartSession?: (task: Task, minutes: number) => Promise<void>;
   onReschedule?: (task: Task, newDayNumber: number) => Promise<void>;
   onNextStep?: () => void;
+  onAskAi?: (task: Task) => void;
   isLoading: boolean;
 }
 
@@ -40,6 +41,7 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
   onStartSession,
   onReschedule,
   onNextStep,
+  onAskAi,
   isLoading,
 }) => {
   const initialSeconds = (task?.estimatedMinutes || 25) * 60;
@@ -366,6 +368,20 @@ export const TaskFocusModal: React.FC<TaskFocusModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {onAskAi && (
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => {
+                  onClose();
+                  onAskAi(task);
+                }}
+                leftIcon={<Sparkles className="w-4 h-4 text-indigo-400" />}
+                className="border-indigo-500/30 text-indigo-300 hover:text-indigo-200"
+              >
+                Ask AI Tutor
+              </Button>
+            )}
             <Button variant="ghost" size="md" onClick={onClose}>
               Close
             </Button>

@@ -139,7 +139,34 @@ CREATE INDEX IF NOT EXISTS idx_study_sessions_user_id ON public.study_sessions(u
 CREATE INDEX IF NOT EXISTS idx_study_sessions_roadmap_id ON public.study_sessions(roadmap_id);
 CREATE INDEX IF NOT EXISTS idx_study_sessions_task_id ON public.study_sessions(task_id);
 
--- 10. Row Level Security (RLS)
+-- 9. Conversations Table (AI Assistant Chat Sessions)
+CREATE TABLE IF NOT EXISTS public.conversations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  roadmap_id UUID REFERENCES public.roadmaps(id) ON DELETE SET NULL,
+  title TEXT NOT NULL DEFAULT 'New Conversation',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 10. Messages Table (Individual Dialogue Turns)
+CREATE TABLE IF NOT EXISTS public.messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+  content TEXT NOT NULL,
+  provider TEXT DEFAULT 'Google Gemini 2.5 Live',
+  is_ai_generated BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON public.conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON public.conversations(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON public.messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_user_id ON public.messages(user_id);
+
+-- 11. Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.learning_goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roadmaps ENABLE ROW LEVEL SECURITY;
@@ -147,8 +174,10 @@ ALTER TABLE public.phases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.skill_gaps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.study_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 
--- 11. Granular RLS Policies Enforcing User Ownership
+-- 12. Granular RLS Policies Enforcing User Ownership
 CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 
@@ -170,4 +199,17 @@ CREATE POLICY "Users can update tasks of their roadmaps" ON public.tasks FOR UPD
 
 CREATE POLICY "Users can view their own study sessions" ON public.study_sessions FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can record their study sessions" ON public.study_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can view their own conversations" ON public.conversations FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can create conversations" ON public.conversations FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own conversations" ON public.conversations FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own conversations" ON public.conversations FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view messages in their conversations" ON public.messages FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.conversations WHERE id = messages.conversation_id AND user_id = auth.uid())
+);
+CREATE POLICY "Users can create messages in their conversations" ON public.messages FOR INSERT WITH CHECK (
+  EXISTS (SELECT 1 FROM public.conversations WHERE id = messages.conversation_id AND user_id = auth.uid())
+);
+
 

@@ -179,3 +179,48 @@ export interface DashboardData {
     tasksRemaining: number;
   } | null;
 }
+
+// AI Assistant & Conversation Types
+export type MessageRole = 'user' | 'assistant' | 'system';
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  role: MessageRole;
+  content: string;
+  provider?: string;
+  isAiGenerated?: boolean;
+  createdAt: string;
+}
+
+export interface Conversation {
+  id: string;
+  userId: string;
+  title: string;
+  roadmapId?: string;
+  createdAt: string;
+  updatedAt: string;
+  messagesCount?: number;
+  lastMessageSnippet?: string;
+}
+
+export interface ConversationWithMessages extends Conversation {
+  messages: ChatMessage[];
+}
+
+export interface SendMessagePayload {
+  message: string;
+  conversationId?: string;
+  roadmapId?: string;
+  currentTopic?: string;
+  stream?: boolean;
+}
+
+export interface AssistantStreamEvent {
+  type: 'chunk' | 'done' | 'error';
+  chunk?: string;
+  message?: ChatMessage;
+  error?: string;
+  provider?: string;
+}
+

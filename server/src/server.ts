@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { config } from './config/env.js';
 import roadmapRoutes from './routes/roadmapRoutes.js';
+import assistantRoutes from './routes/assistantRoutes.js';
 import { getHealthStatus } from './controllers/healthController.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import { authenticateRequest } from './middleware/authMiddleware.js';
@@ -25,6 +26,7 @@ app.get('/api/health', getHealthStatus);
 
 // Core API routes
 app.use('/api/roadmaps', roadmapRoutes);
+app.use('/api/assistant', assistantRoutes);
 
 // Fallback handlers
 app.use(notFoundHandler);

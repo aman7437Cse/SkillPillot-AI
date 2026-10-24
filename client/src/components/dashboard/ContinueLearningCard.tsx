@@ -23,6 +23,7 @@ export interface ContinueLearningCardProps {
   onToggleComplete: (task: Task) => Promise<void>;
   onReschedule: (task: Task, newDayNumber: number) => Promise<void>;
   onViewNextStep?: () => void;
+  onAskAi?: (task: Task) => void;
   isLoading?: boolean;
 }
 
@@ -32,6 +33,7 @@ export const ContinueLearningCard: React.FC<ContinueLearningCardProps> = ({
   onToggleComplete,
   onReschedule,
   onViewNextStep,
+  onAskAi,
   isLoading,
 }) => {
   const [isRescheduling, setIsRescheduling] = useState(false);
@@ -158,7 +160,7 @@ export const ContinueLearningCard: React.FC<ContinueLearningCardProps> = ({
 
       {/* Primary Actions Strip */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/80 relative z-10">
-        {/* Left: Quick Reschedule */}
+        {/* Left: Quick Reschedule & Ask AI */}
         <div className="flex items-center gap-2">
           <Button
             type="button"
@@ -170,6 +172,18 @@ export const ContinueLearningCard: React.FC<ContinueLearningCardProps> = ({
           >
             {isRescheduling ? 'Rescheduling...' : 'Reschedule to Tomorrow'}
           </Button>
+          {onAskAi && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => onAskAi(task)}
+              leftIcon={<Sparkles className="w-3.5 h-3.5 text-indigo-400" />}
+              className="text-indigo-300 hover:text-indigo-200 hover:bg-indigo-950/30"
+            >
+              Ask AI Tutor
+            </Button>
+          )}
         </div>
 
         {/* Right: Start / Resume & Mark Complete */}

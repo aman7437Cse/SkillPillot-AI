@@ -7,12 +7,14 @@ import type { Roadmap } from '../../types';
 export interface NavbarProps {
   activeRoadmap: Roadmap | null;
   onOpenGenerator: () => void;
+  onOpenAssistant?: () => void;
   isBackendHealthy: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeRoadmap,
   onOpenGenerator,
+  onOpenAssistant,
   isBackendHealthy,
 }) => {
   const { user, logout, isConfiguredWithSupabase } = useAuth();
@@ -80,6 +82,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>{activeRoadmap.totalXp || 100} XP</span>
               </div>
             </div>
+          )}
+
+          {/* AI Assistant CTA */}
+          {onOpenAssistant && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenAssistant}
+              leftIcon={<Sparkles className="w-3.5 h-3.5 text-indigo-400" />}
+              className="border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-950/20"
+            >
+              <span className="hidden sm:inline">AI Tutor</span>
+              <span className="sm:hidden">AI</span>
+            </Button>
           )}
 
           {/* New Roadmap CTA */}

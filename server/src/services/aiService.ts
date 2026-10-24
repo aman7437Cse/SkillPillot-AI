@@ -748,3 +748,300 @@ Return STRICT JSON:
     return fallbackQuestions;
   }
 }
+
+export interface AssistantChatOptions {
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+  activeGoal?: string;
+  currentTopic?: string;
+  skillCategory?: string;
+  experienceLevel?: string;
+  onChunk?: (chunk: string) => void;
+  signal?: AbortSignal;
+}
+
+export interface AssistantReplyResult {
+  reply: string;
+  provider: string;
+  isAiGenerated: boolean;
+}
+
+function generateFallbackAssistantResponse(
+  userQuery: string,
+  options: { activeGoal?: string; currentTopic?: string; skillCategory?: string }
+): string {
+  const query = userQuery.toLowerCase();
+  const topic = options.currentTopic || 'Full-Stack Development';
+  const goal = options.activeGoal || 'Software Engineering';
+
+  // Debugging / error analysis query
+  if (query.includes('debug') || query.includes('error') || query.includes('fix') || query.includes('issue') || query.includes('not working') || query.includes('infinite')) {
+    return `### 🐞 Root-Cause Debugging Analysis
+
+I analyzed your issue regarding **${options.currentTopic || 'your code snippet'}**.
+
+#### 1. Why this happens
+The most frequent cause in this pattern is **state synchronization mismatch** or **stale closures**. In modern frontend/backend architectures, when state setters trigger re-renders that re-execute effect dependencies, an infinite loop or unexpected mutation occurs.
+
+#### 2. The Solution & Corrected Code
+\`\`\`typescript
+// ✅ Corrected Implementation: Pure function with safe dependencies
+import { useEffect, useRef } from 'react';
+
+export function useSafeAsyncOperation<T>(fetcher: () => Promise<T>, dependencies: any[]) {
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    let isCancelled = false;
+
+    async function execute() {
+      try {
+        const result = await fetcher();
+        if (!isCancelled && isMountedRef.current) {
+          // Safe state update
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          console.error('Handled operation error:', err);
+        }
+      }
+    }
+
+    execute();
+
+    return () => {
+      isCancelled = true;
+      isMountedRef.current = false;
+    };
+  }, dependencies); // Explicit, memoized dependencies
+}
+\`\`\`
+
+#### 3. Best Practice Checklist
+- **Cleanup Handlers**: Always return an abort/cleanup function from asynchronous effects.
+- **Reference Equality**: Memoize callback handlers passed into hooks using \`useCallback\`.
+- **Defensive Error Handling**: Catch and report errors to avoid unhandled promise rejections.`;
+  }
+
+  // Practice / Interview questions query
+  if (query.includes('practice') || query.includes('drill') || query.includes('question') || query.includes('quiz') || query.includes('problem') || query.includes('interview')) {
+    return `### 🎯 Targeted Practice Drills for **${topic}**
+
+Here are 3 progressive technical drill challenges tailored to your goal (*${goal}*):
+
+---
+
+#### Challenge 1: Core Mechanics (Beginner)
+**Problem**: Write a function that safely accesses a deeply nested property in an object without throwing a \`TypeError\` if intermediate keys are undefined, using native modern syntax.
+- **Input**: \`obj = { user: { profile: { name: "Alex" } } }\`, path: \`user.profile.name\`
+- **Expected Output**: \`"Alex"\`
+- **Hint**: *Consider optional chaining (\`?.\`) combined with the nullish coalescing operator (\`??\`).*
+
+---
+
+#### Challenge 2: Edge-Case Handling (Intermediate)
+**Problem**: Given a stream of incoming asynchronous tasks, implement a throttle function that ensures a callback is executed at most once every \`intervalMs\` milliseconds, firing on both the leading and trailing edges.
+- **Key Edge Case**: Multiple calls within the delay window must queue the latest arguments for execution once the window elapses.
+
+---
+
+#### Challenge 3: Real-World Architecture (Advanced)
+**Problem**: Design a resilient client-side caching wrapper for API calls that:
+1. Returns cached data immediately if less than 60 seconds old.
+2. Background-revalidates stale data and notifies subscribers (Stale-While-Revalidate pattern).
+3. Dedupes identical in-flight network requests.
+
+*Would you like me to walk through the complete code implementation of Challenge 1, 2, or 3?*`;
+  }
+
+  // Concept Explanation query
+  if (query.includes('explain') || query.includes('what is') || query.includes('how does') || query.includes('difference') || query.includes('why')) {
+    return `### 💡 Deep Dive: Understanding **${userQuery.replace(/^(explain|what is|how does)\s+/i, '').trim() || topic}**
+
+Let's break this down into intuitive mental models, followed by production-grade code.
+
+#### 1. The Real-World Analogy
+Think of this architecture like an **airport baggage handling system**. Instead of passengers individually walking down onto the tarmac to load their bags onto the plane (tight coupling), passengers drop their luggage at a standardized counter with a barcode tag (inversion of control). The internal conveyor systems handle routing and security checks without passengers needing to know baggage cart mechanics.
+
+#### 2. Architecture & Code Example
+\`\`\`typescript
+// Decoupled, modular pattern tailored for ${goal}
+export interface ConfigOptions {
+  timeoutMs: number;
+  retryCount: number;
+  enableTelemetry?: boolean;
+}
+
+export class StandardServiceHub {
+  private config: ConfigOptions;
+
+  constructor(config: ConfigOptions) {
+    this.config = Object.freeze({ ...config });
+  }
+
+  public async executeTask<T>(taskName: string, action: () => Promise<T>): Promise<T> {
+    let attempts = 0;
+    while (attempts <= this.config.retryCount) {
+      try {
+        return await action();
+      } catch (error) {
+        attempts++;
+        if (attempts > this.config.retryCount) throw error;
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempts) * 100)); // Exponential backoff
+      }
+    }
+    throw new Error(\`Failed to execute \${taskName}\`);
+  }
+}
+\`\`\`
+
+#### 3. Key Takeaways
+- **Separation of Concerns**: High-level modules should not depend on low-level implementation details.
+- **Resilience**: Incorporate exponential backoff and timeout thresholds at connection boundaries.
+- **Predictability**: Immutable options objects prevent unexpected mutation side effects across async flows.
+
+*Feel free to ask for a line-by-line breakdown or how this applies directly to your current lesson!*`;
+  }
+
+  // General educational query
+  return `### 🚀 Learning Guidance on **${topic}**
+
+Here is a focused, actionable breakdown to support your progress towards **${goal}**:
+
+#### 1. Core Principles
+When working in this domain, top engineers prioritize **readability, idempotency, and clean boundary encapsulation**.
+
+\`\`\`typescript
+// Production Best Practice Pattern
+export type AsyncState<T> =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'success'; data: T }
+  | { status: 'error'; error: Error };
+
+export function isLoaded<T>(state: AsyncState<T>): state is { status: 'success'; data: T } {
+  return state.status === 'success';
+}
+\`\`\`
+
+#### 2. Practical Application for Your Active Roadmap
+1. **Model Explicit States**: Avoid separate boolean flags like \`isLoading\`, \`isError\`, \`data\` that can enter impossible states (\`isLoading=true\` AND \`isError=true\`). Use discriminated unions instead.
+2. **Optimize Velocity**: Focus on bite-sized iterations rather than attempting massive rewrites in a single session.
+3. **Validate at the Boundary**: Ensure all external data (API responses, user inputs) is validated with runtime schemas before entering your business logic.
+
+*What specific aspect of this would you like to explore next? I can provide code examples, write a custom drill, or help you debug a file!*`;
+}
+
+export async function generateAssistantResponse(options: AssistantChatOptions): Promise<AssistantReplyResult> {
+  const { messages, activeGoal, currentTopic, skillCategory, experienceLevel, onChunk, signal } = options;
+  const latestUserMsg = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
+
+  const systemPrompt = `You are "SkillPilot AI Tutor", a world-class AI academic mentor and software engineering coach.
+Your mission is to help students master challenging concepts, understand code deeply, debug errors systematically, and practice effectively without feeling overwhelmed.
+
+Tone & Style Guidelines:
+- Beginner-friendly yet technically precise: Use clear analogies for difficult concepts before diving into technical details.
+- Line-by-Line Code Explanations: When explaining code, break it down clearly with line references and highlight the "why", not just the "what".
+- Debugging Specialist: When analyzing errors, identify the root cause immediately, show the corrected snippet, explain what went wrong, and recommend a preventative best practice.
+- Educational Practice: When generating problems or questions, provide realistic test cases, progressive difficulty hints, and concise solution explanations.
+- Markdown Formatting: Structure your answers with clean headers, bullet points, callout takeaways, and fenced code blocks with the exact language identifier (e.g. \`\`\`typescript, \`\`\`python, \`\`\`cpp, \`\`\`sql).
+- Contextual Awareness:
+  ${activeGoal ? `- Student Target Goal: ${activeGoal}` : ''}
+  ${skillCategory ? `- Skill Domain: ${skillCategory}` : ''}
+  ${currentTopic ? `- Current Focus Lesson: ${currentTopic}` : ''}
+  ${experienceLevel ? `- Student Experience Level: ${experienceLevel}` : ''}
+`;
+
+  // 1. Try Live Gemini if configured
+  if (geminiClient) {
+    try {
+      const contents = messages
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        }));
+
+      if (onChunk) {
+        const responseStream = await geminiClient.models.generateContentStream({
+          model: 'gemini-2.5-flash',
+          contents,
+          config: {
+            systemInstruction: systemPrompt,
+            temperature: 0.7,
+          },
+        });
+
+        let fullText = '';
+        for await (const chunk of responseStream) {
+          if (signal?.aborted) break;
+          const chunkText = chunk.text;
+          if (chunkText) {
+            fullText += chunkText;
+            onChunk(chunkText);
+          }
+        }
+
+        if (fullText.trim()) {
+          return {
+            reply: fullText,
+            provider: 'Google Gemini 2.5 Live',
+            isAiGenerated: true,
+          };
+        }
+      } else {
+        const response = await geminiClient.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents,
+          config: {
+            systemInstruction: systemPrompt,
+            temperature: 0.7,
+          },
+        });
+
+        const text = response.text?.trim();
+        if (text) {
+          return {
+            reply: text,
+            provider: 'Google Gemini 2.5 Live',
+            isAiGenerated: true,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('Gemini live call encountered an error, using intelligent educational fallback:', err);
+    }
+  }
+
+  // 2. Intelligent Educational Fallback Tutor (Local Demo Engine)
+  const fallbackReply = generateFallbackAssistantResponse(latestUserMsg, {
+    activeGoal,
+    currentTopic,
+    skillCategory,
+  });
+
+  // If streaming is requested, emit chunks with small pauses
+  if (onChunk) {
+    const words = fallbackReply.split(/(\s+)/);
+    let accumulated = '';
+    for (let i = 0; i < words.length; i += 4) {
+      if (signal?.aborted) break;
+      const slice = words.slice(i, i + 4).join('');
+      accumulated += slice;
+      onChunk(slice);
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    return {
+      reply: accumulated || fallbackReply,
+      provider: 'Deterministic Educational Engine (Local Demo)',
+      isAiGenerated: false,
+    };
+  }
+
+  return {
+    reply: fallbackReply,
+    provider: 'Deterministic Educational Engine (Local Demo)',
+    isAiGenerated: false,
+  };
+}
+
